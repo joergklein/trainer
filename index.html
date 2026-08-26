@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>CW Trainer</title>
+
+    <link rel="stylesheet" href="assets/css/styles.css" />
+  </head>
+
+  <body>
+    <main class="container">
+      <header>
+        <h1>CW Trainer</h1>
+      </header>
+
+      <section class="training">
+        <!-- Method -->
+        <div class="control-group">
+          <label for="method">Method</label>
+
+          <select id="method">
+            <option value="">Loading...</option>
+          </select>
+        </div>
+
+        <!-- Lesson -->
+        <div class="control-group">
+          <label for="lesson">Lesson</label>
+
+          <select id="lesson">
+            <option value="">Loading...</option>
+          </select>
+        </div>
+
+        <!-- Custom CSV -->
+        <section class="custom-csv">
+          <div class="custom-csv-heading">
+            <p>Load your own csv file and train your own signs</p>
+          </div>
+
+          <div class="custom-csv-action">
+            <label class="file-button" for="custom-file">
+              Choose CSV file
+            </label>
+
+            <input id="custom-file" type="file" accept=".csv,text/csv" hidden />
+          </div>
+
+          <div id="custom-files" class="custom-files" aria-live="polite"></div>
+        </section>
+
+        <!-- Characters -->
+        <div id="characters" class="characters"></div>
+
+        <!-- Settings -->
+        <div class="settings">
+          <div class="control-group">
+            <label for="groups">Groups</label>
+
+            <input id="groups" type="number" min="1" max="1000" value="50" />
+          </div>
+
+          <div class="control-group">
+            <label for="groupSize">Characters per group</label>
+
+            <input id="groupSize" type="number" min="1" max="20" value="5" />
+          </div>
+
+          <div class="control-group">
+            <label for="wpm">Speed (WPM)</label>
+
+            <input id="wpm" type="number" min="1" max="60" value="12" />
+          </div>
+
+          <div class="control-group">
+            <label for="tone">Tone (Hz)</label>
+
+            <input id="tone" type="number" min="100" max="2000" value="600" />
+          </div>
+
+          <div class="control-group">
+            <label for="volume">Volume</label>
+
+            <input id="volume" type="range" min="0" max="100" value="30" />
+          </div>
+        </div>
+
+        <!-- Training buttons -->
+        <div class="buttons">
+          <button id="start" type="button">▶ Start</button>
+
+          <button id="pause" type="button" disabled>⏸ Pause</button>
+
+          <button id="stop" type="button" disabled>■ Stop</button>
+        </div>
+
+        <!-- Status -->
+        <section class="status">
+          <div id="status" class="status-text">Ready</div>
+
+          <div class="progress">
+            <div id="progress-bar" class="progress-bar"></div>
+          </div>
+
+          <div id="counter" class="counter">0 / 0</div>
+        </section>
+
+        <!-- Solution -->
+        <section class="solution-section">
+          <button id="show-solution" type="button" disabled>
+            Show solution
+          </button>
+
+          <pre id="solution" class="solution" hidden></pre>
+        </section>
+      </section>
+    </main>
+
+    <script src="assets/js/cwtrainer.js"></script>
+  </body>
+</html>

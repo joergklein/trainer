@@ -1,0 +1,35 @@
+{
+  "methods": [
+    {
+      "id": "e13",
+      "name": "E13",
+      "alphabet": "elv0aqst2cod5/ir9gxf4nu7h,=.bkp3myjwz168?-@:;!_+()'\"aouzhkvtes"
+    },
+    {
+      "id": "koch",
+      "name": "Koch",
+      "alphabet": "kmrsuaptlowi.njef0y,vg5/q9zh38b?427c1d6x"
+    },
+    {
+      "id": "lcwo",
+      "name": "LCWO",
+      "alphabet": "kmuresnaptlwi.jz=foy,vg5/q92h38b?47c1d60x-aouzhe+@:;!_()'\"kvts"
+    },
+    {
+      "id": "m32",
+      "name": "M32",
+      "alphabet": "teanois14rhdl25ucmw36?fypg79/bvkj80=xqz.,-aouzhe+@:;!_()'\"kvts"
+    },
+    {
+      "id": "adfgvx",
+      "name": "ADFGVX",
+      "alphabet": "adfgxvel0qst2co5/ir94nu7h,=.bkp3myjwz168?-@:;!_+()'\"aouzhkvtes"
+    },
+    {
+      "id": "abbreviations",
+      "name": "Abkürzungen",
+      "source": "abbreviations.csv",
+      "type": "abbreviations"
+    }
+  ]
+}
