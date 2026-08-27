@@ -60,6 +60,13 @@ let currentCharacter = 0;
 let running = false;
 let paused = false;
 let timer = null;
+
+/*
+ * Jede Trainingseinheit erhält eine eigene Generation.
+ *
+ * Dadurch können alte Timer/Callbacks nach Stop,
+ * Reset oder einem neuen Start nichts mehr auslösen.
+ */
 let trainingGeneration = 0;
 
 /* ============================================================
@@ -138,6 +145,16 @@ const CW_WORD_GAP_EXTRA = CW_WORD_GAP - CW_CHARACTER_GAP;
 const CW_BEGIN_PROSIGN = "-.-.-";
 const CW_FINISH = "+";
 
+/*
+ * Kurze Wartezeit nach dem ersten AudioContext.resume().
+ *
+ * Besonders beim ersten Start können Browser den
+ * AudioContext noch initialisieren. Ohne diese Pause
+ * können VVV und KA beim ersten Durchlauf zu schnell
+ * beginnen.
+ */
+const AUDIO_START_DELAY = 100;
+
 /* ============================================================
    HELPERS
    ============================================================ */
@@ -178,6 +195,12 @@ function clearTimer() {
 
 function isGenerationActive(generation) {
   return running && generation === trainingGeneration;
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
 }
 
 /* ============================================================
@@ -247,7 +270,6 @@ function parseCSV(text) {
     }
 
     const abbreviation = values[abbreviationIndex].trim();
-
     const meaning = values[meaningIndex].trim();
 
     if (!abbreviation) {
@@ -357,7 +379,6 @@ function rebuildMethods(selectId = null) {
   }
 
   const previousId = selectId || currentMethod?.id || null;
-
   const allMethods = getAllMethods();
 
   methodSelect.innerHTML = "";
@@ -377,8 +398,10 @@ function rebuildMethods(selectId = null) {
 
   if (allMethods.length === 0) {
     currentMethod = null;
+
     populateLessons();
     updateCharacters();
+
     return;
   }
 
@@ -406,6 +429,7 @@ async function loadAbbreviations() {
     }
 
     abbreviationData = file.data.slice();
+
     return;
   }
 
@@ -588,7 +612,6 @@ function createCharacterSequence() {
   }
 
   const { groups, groupSize } = getGroupSettings();
-
   const sequence = [];
 
   for (let group = 0; group < groups; group++) {
@@ -614,7 +637,6 @@ function createAbbreviationSequence() {
   }
 
   const { groups, groupSize } = getGroupSettings();
-
   const sequence = [];
 
   for (let group = 0; group < groups; group++) {
@@ -650,14 +672,27 @@ function countTrainingItems() {
 
 async function startAudio() {
   if (typeof INCWAudio === "undefined") {
-    throw new Error("incwaudio.js is not loaded.");
+    throw new Error(
+      "INCWAudio is not loaded. Check that incwaudio.js is loaded before cwtrainer.js.",
+    );
   }
 
   if (typeof INCWAudio.start !== "function") {
     throw new Error("INCWAudio.start() is not available.");
   }
 
+  /*
+   * AudioContext aktivieren.
+   */
   await INCWAudio.start();
+
+  /*
+   * Besonders beim ersten Start kann der Browser
+   * nach resume() noch Audio-intern initialisieren.
+   *
+   * VVV und KA dürfen erst danach beginnen.
+   */
+  await delay(AUDIO_START_DELAY);
 }
 
 function stopAudio() {
@@ -775,6 +810,7 @@ function sendCode(
     if (paused) {
       timer = setTimeout(() => {
         timer = null;
+
         nextElement();
       }, 50);
 
@@ -783,7 +819,6 @@ function sendCode(
 
     if (index >= code.length) {
       waitUnits(trailingGap, finished, generation);
-
       return;
     }
 
@@ -851,6 +886,7 @@ function sendAbbreviation(
     if (paused) {
       timer = setTimeout(() => {
         timer = null;
+
         nextCharacter();
       }, 50);
 
@@ -921,6 +957,7 @@ function sendNextCharacter(generation = trainingGeneration) {
   }
 
   playedSequence.push(character);
+
   updateProgress();
 
   sendMorse(
@@ -949,6 +986,7 @@ function sendNextAbbreviation(generation = trainingGeneration) {
   }
 
   playedSequence.push(entry);
+
   updateProgress();
 
   sendAbbreviation(
@@ -980,7 +1018,6 @@ function buildSolutionText() {
   }
 
   const { groupSize } = getGroupSettings();
-
   const groups = [];
 
   for (let i = 0; i < playedSequence.length; i += groupSize) {
@@ -1026,16 +1063,25 @@ async function startTraining() {
     return;
   }
 
+  /*
+   * Audio muss vor dem eigentlichen Trainingslauf
+   * vollständig aktiviert sein.
+   */
   try {
     await startAudio();
   } catch (error) {
     console.error(error);
+
     setStatus(error.message);
+
     return;
   }
 
   clearTimer();
 
+  /*
+   * Neuer Trainingslauf.
+   */
   trainingGeneration++;
 
   const generation = trainingGeneration;
@@ -1060,6 +1106,12 @@ async function startTraining() {
 
   pauseButton.textContent = "⏸ Pause";
 
+  /*
+   * Erst jetzt VVV starten.
+   *
+   * startAudio() inklusive Stabilisierung ist
+   * zu diesem Zeitpunkt bereits abgeschlossen.
+   */
   setStatus("VVV");
 
   sendVVV(() => {
@@ -1075,6 +1127,7 @@ async function startTraining() {
       }
 
       setStatus("Training");
+
       sendNext(generation);
     }, generation);
   }, generation);
@@ -1087,18 +1140,18 @@ function togglePause() {
 
   if (!paused) {
     paused = true;
+
     clearTimer();
 
     pauseButton.textContent = "▶ Resume";
-
     setStatus("Paused");
+
     return;
   }
 
   paused = false;
 
   pauseButton.textContent = "⏸ Pause";
-
   setStatus("Training");
 
   if (timer === null) {
@@ -1107,12 +1160,19 @@ function togglePause() {
 }
 
 function stopTraining() {
+  /*
+   * Alte Callbacks sofort ungültig machen.
+   */
   trainingGeneration++;
 
   running = false;
   paused = false;
 
   clearTimer();
+
+  /*
+   * Audio nur beim echten Stop stoppen.
+   */
   stopAudio();
 
   solutionElement.textContent = buildSolutionText();
@@ -1148,6 +1208,10 @@ function finishTraining(generation = trainingGeneration) {
       paused = false;
 
       clearTimer();
+
+      /*
+       * Der letzte Ton ist bereits beendet.
+       */
       stopAudio();
 
       startButton.disabled = false;
@@ -1211,7 +1275,9 @@ async function loadIndex() {
   try {
     setStatus("Loading methods ...");
 
-    const response = await fetch("text/index.json", { cache: "no-store" });
+    const response = await fetch("text/index.json", {
+      cache: "no-store",
+    });
 
     if (!response.ok) {
       throw new Error("HTTP " + response.status);
@@ -1226,6 +1292,7 @@ async function loadIndex() {
     methods = data.methods;
 
     rebuildMethods();
+
     setStatus("Ready");
   } catch (error) {
     console.error(error);
@@ -1286,6 +1353,7 @@ document.addEventListener("keydown", (event) => {
     tag !== "BUTTON"
   ) {
     event.preventDefault();
+
     togglePause();
   }
 
