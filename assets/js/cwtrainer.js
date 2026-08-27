@@ -60,13 +60,6 @@ let currentCharacter = 0;
 let running = false;
 let paused = false;
 let timer = null;
-
-/*
- * Jede Trainingseinheit erhält eine eigene Generation.
- *
- * Dadurch können alte Timer/Callbacks nach Stop,
- * Reset oder einem neuen Start nichts mehr auslösen.
- */
 let trainingGeneration = 0;
 
 /* ============================================================
@@ -145,16 +138,6 @@ const CW_WORD_GAP_EXTRA = CW_WORD_GAP - CW_CHARACTER_GAP;
 const CW_BEGIN_PROSIGN = "-.-.-";
 const CW_FINISH = "+";
 
-/*
- * Kurze Wartezeit nach dem ersten AudioContext.resume().
- *
- * Besonders beim ersten Start können Browser den
- * AudioContext noch initialisieren. Ohne diese Pause
- * können VVV und KA beim ersten Durchlauf zu schnell
- * beginnen.
- */
-const AUDIO_START_DELAY = 100;
-
 /* ============================================================
    HELPERS
    ============================================================ */
@@ -195,12 +178,6 @@ function clearTimer() {
 
 function isGenerationActive(generation) {
   return running && generation === trainingGeneration;
-}
-
-function delay(milliseconds) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
 }
 
 /* ============================================================
@@ -379,6 +356,7 @@ function rebuildMethods(selectId = null) {
   }
 
   const previousId = selectId || currentMethod?.id || null;
+
   const allMethods = getAllMethods();
 
   methodSelect.innerHTML = "";
@@ -429,7 +407,6 @@ async function loadAbbreviations() {
     }
 
     abbreviationData = file.data.slice();
-
     return;
   }
 
@@ -514,6 +491,7 @@ function populateLessons() {
 
 function selectLesson() {
   const value = Number(lessonSelect.value);
+
   const count = getLessonCount();
 
   currentLesson =
@@ -554,6 +532,7 @@ function updateCharacters() {
 
 function getGroupSettings() {
   let groups = parseInt(groupsInput.value, 10);
+
   let groupSize = parseInt(groupSizeInput.value, 10);
 
   if (!Number.isFinite(groups) || groups < 1) {
@@ -612,6 +591,7 @@ function createCharacterSequence() {
   }
 
   const { groups, groupSize } = getGroupSettings();
+
   const sequence = [];
 
   for (let group = 0; group < groups; group++) {
@@ -637,6 +617,7 @@ function createAbbreviationSequence() {
   }
 
   const { groups, groupSize } = getGroupSettings();
+
   const sequence = [];
 
   for (let group = 0; group < groups; group++) {
@@ -672,27 +653,43 @@ function countTrainingItems() {
 
 async function startAudio() {
   if (typeof INCWAudio === "undefined") {
-    throw new Error(
-      "INCWAudio is not loaded. Check that incwaudio.js is loaded before cwtrainer.js.",
-    );
+    throw new Error("INCWAudio is not loaded.");
   }
 
   if (typeof INCWAudio.start !== "function") {
     throw new Error("INCWAudio.start() is not available.");
   }
 
-  /*
-   * AudioContext aktivieren.
-   */
-  await INCWAudio.start();
+  const audio = await INCWAudio.start();
+
+  if (!audio || audio.state !== "running") {
+    throw new Error("AudioContext konnte nicht gestartet werden.");
+  }
 
   /*
-   * Besonders beim ersten Start kann der Browser
-   * nach resume() noch Audio-intern initialisieren.
+   * Nicht künstlich warten.
    *
-   * VVV und KA dürfen erst danach beginnen.
+   * Wir warten nur darauf, dass die
+   * AudioContext-Zeit tatsächlich fortschreitet.
+   * Damit beginnt VVV erst nach der
+   * vollständigen Audio-Initialisierung.
    */
-  await delay(AUDIO_START_DELAY);
+  const startTime = audio.currentTime;
+
+  await new Promise((resolve) => {
+    const check = () => {
+      if (audio.currentTime > startTime) {
+        resolve();
+        return;
+      }
+
+      requestAnimationFrame(check);
+    };
+
+    check();
+  });
+
+  return audio;
 }
 
 function stopAudio() {
@@ -729,6 +726,7 @@ function playTone(duration, finished, generation) {
     console.error(error);
 
     stopTraining();
+
     setStatus("Audio error: " + error.message);
 
     return;
@@ -810,7 +808,6 @@ function sendCode(
     if (paused) {
       timer = setTimeout(() => {
         timer = null;
-
         nextElement();
       }, 50);
 
@@ -819,6 +816,7 @@ function sendCode(
 
     if (index >= code.length) {
       waitUnits(trailingGap, finished, generation);
+
       return;
     }
 
@@ -886,7 +884,6 @@ function sendAbbreviation(
     if (paused) {
       timer = setTimeout(() => {
         timer = null;
-
         nextCharacter();
       }, 50);
 
@@ -1018,6 +1015,7 @@ function buildSolutionText() {
   }
 
   const { groupSize } = getGroupSettings();
+
   const groups = [];
 
   for (let i = 0; i < playedSequence.length; i += groupSize) {
@@ -1029,6 +1027,7 @@ function buildSolutionText() {
 
 function updateProgress() {
   const total = countTrainingItems();
+
   const current = playedSequence.length;
 
   counterElement.textContent = current + " / " + total;
@@ -1053,6 +1052,7 @@ function showSolution() {
 async function startTraining() {
   if (!currentMethod) {
     setStatus("No training set selected.");
+
     return;
   }
 
@@ -1060,12 +1060,15 @@ async function startTraining() {
 
   if (trainingSequence.length === 0) {
     setStatus("No training data available.");
+
     return;
   }
 
   /*
-   * Audio muss vor dem eigentlichen Trainingslauf
-   * vollständig aktiviert sein.
+   * Wichtig:
+   * VVV und KA werden erst nach dem
+   * vollständig abgeschlossenen startAudio()
+   * gestartet.
    */
   try {
     await startAudio();
@@ -1079,9 +1082,6 @@ async function startTraining() {
 
   clearTimer();
 
-  /*
-   * Neuer Trainingslauf.
-   */
   trainingGeneration++;
 
   const generation = trainingGeneration;
@@ -1106,12 +1106,6 @@ async function startTraining() {
 
   pauseButton.textContent = "⏸ Pause";
 
-  /*
-   * Erst jetzt VVV starten.
-   *
-   * startAudio() inklusive Stabilisierung ist
-   * zu diesem Zeitpunkt bereits abgeschlossen.
-   */
   setStatus("VVV");
 
   sendVVV(() => {
@@ -1140,10 +1134,10 @@ function togglePause() {
 
   if (!paused) {
     paused = true;
-
     clearTimer();
 
     pauseButton.textContent = "▶ Resume";
+
     setStatus("Paused");
 
     return;
@@ -1152,6 +1146,7 @@ function togglePause() {
   paused = false;
 
   pauseButton.textContent = "⏸ Pause";
+
   setStatus("Training");
 
   if (timer === null) {
@@ -1160,19 +1155,12 @@ function togglePause() {
 }
 
 function stopTraining() {
-  /*
-   * Alte Callbacks sofort ungültig machen.
-   */
   trainingGeneration++;
 
   running = false;
   paused = false;
 
   clearTimer();
-
-  /*
-   * Audio nur beim echten Stop stoppen.
-   */
   stopAudio();
 
   solutionElement.textContent = buildSolutionText();
@@ -1208,10 +1196,6 @@ function finishTraining(generation = trainingGeneration) {
       paused = false;
 
       clearTimer();
-
-      /*
-       * Der letzte Ton ist bereits beendet.
-       */
       stopAudio();
 
       startButton.disabled = false;
@@ -1353,7 +1337,6 @@ document.addEventListener("keydown", (event) => {
     tag !== "BUTTON"
   ) {
     event.preventDefault();
-
     togglePause();
   }
 

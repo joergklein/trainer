@@ -2,15 +2,14 @@
 
 const INCWAudio = (() => {
   let ctx = null;
-  let sequence = [];
-  let activeSource = null;
 
-  const ATTACK = 0.008;
-  const RELEASE = 0.012;
+  const ATTACK = 0.01;
+  const RELEASE = 0.02;
 
   const DEFAULT_FREQUENCY = 600;
   const DEFAULT_VOLUME = 0.3;
-  const MAX_VOLUME = 0.8;
+
+  const activeSources = new Set();
 
   function getContext() {
     if (ctx) {
@@ -24,6 +23,7 @@ const INCWAudio = (() => {
     }
 
     ctx = new AudioContextClass();
+
     return ctx;
   }
 
@@ -34,144 +34,97 @@ const INCWAudio = (() => {
       await audio.resume();
     }
 
-    sequence = [];
+    if (audio.state !== "running") {
+      throw new Error("AudioContext konnte nicht gestartet werden.");
+    }
+
     return audio;
   }
 
   function safeFrequency(value) {
-    value = Number(value);
+    const frequency = Number(value);
 
-    if (!Number.isFinite(value)) {
+    if (!Number.isFinite(frequency)) {
       return DEFAULT_FREQUENCY;
     }
 
-    return Math.max(100, Math.min(2000, value));
+    return Math.max(100, Math.min(2000, frequency));
   }
 
   function safeDuration(value) {
-    value = Number(value);
+    const duration = Number(value);
 
-    if (!Number.isFinite(value)) {
+    if (!Number.isFinite(duration)) {
       return 0.001;
     }
 
-    return Math.max(0.001, value);
+    return Math.max(0.001, duration);
   }
 
   function safeVolume(value) {
-    value = Number(value);
+    const volume = Number(value);
 
-    if (!Number.isFinite(value)) {
+    if (!Number.isFinite(volume)) {
       return DEFAULT_VOLUME;
     }
 
-    return Math.max(0, Math.min(MAX_VOLUME, value));
+    return Math.max(0, Math.min(0.8, volume));
   }
 
   function tone(frequency, duration, volume) {
     const audio = getContext();
 
-    if (audio.state === "suspended") {
+    if (audio.state !== "running") {
       return;
     }
 
     const safeFreq = safeFrequency(frequency);
-    const safeDurationSeconds = safeDuration(duration);
+    const durationSeconds = safeDuration(duration);
     const safeVol = safeVolume(volume);
 
-    if (safeVol <= 0) {
-      return;
-    }
+    const oscillator = audio.createOscillator();
+    const envelope = audio.createGain();
 
-    sequence.push({
-      frequency: safeFreq,
-      duration: safeDurationSeconds,
-      volume: safeVol,
-    });
+    oscillator.type = "sine";
 
-    scheduleSequence();
-  }
+    const startTime = audio.currentTime + 0.005;
+    const endTime = startTime + durationSeconds;
 
-  function scheduleSequence() {
-    const audio = getContext();
+    const attack = Math.min(ATTACK, durationSeconds / 3);
 
-    if (audio.state === "suspended" || sequence.length === 0 || activeSource) {
-      return;
-    }
+    const release = Math.min(RELEASE, durationSeconds / 3);
 
-    const items = sequence;
-    sequence = [];
+    const attackEnd = startTime + attack;
+    const releaseStart = endTime - release;
 
-    let totalDuration = 0;
+    oscillator.frequency.setValueAtTime(safeFreq, startTime);
 
-    for (const item of items) {
-      totalDuration += item.duration;
-    }
+    envelope.gain.setValueAtTime(0, startTime);
 
-    if (totalDuration <= 0) {
-      return;
-    }
+    envelope.gain.linearRampToValueAtTime(safeVol, attackEnd);
 
-    const sampleRate = audio.sampleRate;
-    const frameCount = Math.max(1, Math.ceil(totalDuration * sampleRate));
+    envelope.gain.setValueAtTime(safeVol, releaseStart);
 
-    const buffer = audio.createBuffer(1, frameCount, sampleRate);
+    envelope.gain.linearRampToValueAtTime(0, endTime);
 
-    const data = buffer.getChannelData(0);
+    oscillator.connect(envelope);
+    envelope.connect(audio.destination);
 
-    let offset = 0;
+    activeSources.add(oscillator);
 
-    for (const item of items) {
-      const frames = Math.max(1, Math.floor(item.duration * sampleRate));
-
-      const attackFrames = Math.max(
-        1,
-        Math.floor(Math.min(ATTACK, item.duration / 3) * sampleRate),
-      );
-
-      const releaseFrames = Math.max(
-        1,
-        Math.floor(Math.min(RELEASE, item.duration / 3) * sampleRate),
-      );
-
-      const releaseStart = Math.max(0, frames - releaseFrames);
-
-      for (let i = 0; i < frames && offset + i < data.length; i++) {
-        const sine = Math.sin(2 * Math.PI * item.frequency * (i / sampleRate));
-
-        let envelope = 1;
-
-        if (i < attackFrames) {
-          envelope = i / attackFrames;
-        }
-
-        if (i >= releaseStart) {
-          envelope = Math.min(envelope, (frames - i) / releaseFrames);
-        }
-
-        data[offset + i] =
-          sine * Math.max(0, Math.min(1, envelope)) * item.volume;
-      }
-
-      offset += frames;
-    }
-
-    const source = audio.createBufferSource();
-    source.buffer = buffer;
-    source.connect(audio.destination);
-
-    activeSource = source;
-
-    source.addEventListener(
+    oscillator.addEventListener(
       "ended",
       () => {
-        if (activeSource === source) {
-          activeSource = null;
-          scheduleSequence();
+        activeSources.delete(oscillator);
+
+        try {
+          oscillator.disconnect();
+        } catch {
+          // Bereits getrennt.
         }
 
         try {
-          source.disconnect();
+          envelope.disconnect();
         } catch {
           // Bereits getrennt.
         }
@@ -179,16 +132,27 @@ const INCWAudio = (() => {
       { once: true },
     );
 
-    source.start(audio.currentTime + 0.01);
+    oscillator.start(startTime);
+    oscillator.stop(endTime);
   }
 
   function stop() {
-    /*
-     * Keine laufende Quelle abrupt beenden.
-     * Dadurch bleibt das Signal knackfrei.
-     */
+    const audio = ctx;
 
-    sequence = [];
+    if (!audio || audio.state === "closed") {
+      return;
+    }
+
+    const stopTime = audio.currentTime;
+    const fadeTime = 0.015;
+
+    for (const oscillator of activeSources) {
+      try {
+        oscillator.stop(stopTime + fadeTime);
+      } catch {
+        // Quelle wurde bereits beendet.
+      }
+    }
   }
 
   return {
