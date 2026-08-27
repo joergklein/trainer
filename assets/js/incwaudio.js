@@ -1,35 +1,12 @@
 "use strict";
 
-/*
- * ============================================================
- * INCW AUDIO
- * ============================================================
- *
- * Reine Audio-Engine für den CW-Trainer.
- *
- * cwtrainer.js benutzt ausschließlich:
- *
- *   await INCWAudio.start()
- *   INCWAudio.tone(frequency, duration, volume)
- *   INCWAudio.stop()
- *
- * Es wird hier KEIN dauerhaft laufender Oszillator verwendet.
- * Jeder Ton wird sauber erzeugt und nach seinem Fade-Out
- * wieder beendet.
- * ============================================================
- */
-
 const INCWAudio = (() => {
   let ctx = null;
+  let oscillator = null;
+  let gain = null;
 
   const ATTACK = 0.008;
-  const RELEASE = 0.006;
-
-  /*
-   * ------------------------------------------------------------
-   * AudioContext
-   * ------------------------------------------------------------
-   */
+  const RELEASE = 0.012;
 
   function getContext() {
     if (ctx) {
@@ -44,21 +21,33 @@ const INCWAudio = (() => {
 
     ctx = new AudioContextClass();
 
+    oscillator = ctx.createOscillator();
+    gain = ctx.createGain();
+
+    oscillator.type = "sine";
+
+    oscillator.frequency.setValueAtTime(600, ctx.currentTime);
+
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+
+    oscillator.start();
+
     return ctx;
   }
 
-  /*
-   * ------------------------------------------------------------
-   * Start
-   * ------------------------------------------------------------
-   *
-   * Wichtig:
-   * start() erzeugt selbst KEINEN Ton.
-   * Dadurch darf beim Drücken von Start kein Knacks entstehen.
-   */
-
   async function start() {
     const audio = getContext();
+
+    const now = audio.currentTime;
+
+    /*
+     * Vor dem Start garantiert stumm.
+     */
+    gain.gain.cancelScheduledValues(now);
+    gain.gain.setValueAtTime(0, now);
 
     if (audio.state === "suspended") {
       await audio.resume();
@@ -66,12 +55,6 @@ const INCWAudio = (() => {
 
     return audio;
   }
-
-  /*
-   * ------------------------------------------------------------
-   * Tone
-   * ------------------------------------------------------------
-   */
 
   function tone(frequency, duration, volume) {
     const audio = getContext();
@@ -89,112 +72,62 @@ const INCWAudio = (() => {
 
     const safeVolume = Math.max(0, Math.min(1, Number(volume) || 0));
 
-    /*
-     * Für JEDEN Morse-Ton werden frische Nodes erzeugt.
-     *
-     * Wichtig:
-     * Der Oszillator wird nicht bei Start erzeugt.
-     * Dadurch entsteht beim Start der Anwendung kein Signal.
-     */
-
-    const oscillator = audio.createOscillator();
-    const gain = audio.createGain();
-
     const now = audio.currentTime;
 
     const attack = Math.min(ATTACK, safeDuration / 3);
 
     const release = Math.min(RELEASE, safeDuration / 3);
 
-    const soundEnd = now + safeDuration;
+    const end = now + safeDuration;
 
-    oscillator.type = "sine";
+    const releaseStart = Math.max(now + attack, end - release);
+
+    /*
+     * Frequenz ändern, aber Oszillator NICHT neu starten.
+     */
+    oscillator.frequency.cancelScheduledValues(now);
 
     oscillator.frequency.setValueAtTime(safeFrequency, now);
 
     /*
-     * Der Gain startet garantiert bei 0.
+     * Alten Gain-Zeitplan entfernen.
      */
+    gain.gain.cancelScheduledValues(now);
 
+    /*
+     * Immer von STILLE starten.
+     */
     gain.gain.setValueAtTime(0, now);
 
     /*
-     * Kurzer Fade-In gegen Klicks.
+     * TON EIN
      */
-
     gain.gain.linearRampToValueAtTime(safeVolume, now + attack);
 
     /*
-     * Pegel konstant halten.
+     * TON HALTEN
      */
-
-    const releaseStart = Math.max(now + attack, soundEnd - release);
-
     gain.gain.setValueAtTime(safeVolume, releaseStart);
 
     /*
-     * Kurzer Fade-Out gegen Klicks.
+     * TON AUS
      */
-
-    gain.gain.linearRampToValueAtTime(0, soundEnd);
-
-    oscillator.connect(gain);
-    gain.connect(audio.destination);
-
-    /*
-     * Start und Stop exakt auf dem Audio-Zeitplan.
-     */
-
-    oscillator.start(now);
-
-    oscillator.stop(soundEnd);
-
-    /*
-     * Nach dem Stop werden die Nodes wieder getrennt.
-     * Sie bleiben dadurch nicht unnötig im Audio-Graphen.
-     */
-
-    oscillator.addEventListener(
-      "ended",
-      () => {
-        try {
-          oscillator.disconnect();
-        } catch (_) {}
-
-        try {
-          gain.disconnect();
-        } catch (_) {}
-      },
-      { once: true },
-    );
+    gain.gain.linearRampToValueAtTime(0, end);
   }
-
-  /*
-   * ------------------------------------------------------------
-   * Stop
-   * ------------------------------------------------------------
-   *
-   * Es wird kein AudioContext geschlossen.
-   *
-   * Dadurch kann der Trainer nach Stop unmittelbar wieder
-   * gestartet werden.
-   *
-   * Da tone() jeden Ton selbst sauber ausblendet, gibt es hier
-   * keinen laufenden globalen Oszillator, den wir hart abbrechen
-   * müssten.
-   */
 
   function stop() {
-    /*
-     * Absichtlich leer.
-     */
-  }
+    if (!ctx || !gain) {
+      return;
+    }
 
-  /*
-   * ------------------------------------------------------------
-   * Public API
-   * ------------------------------------------------------------
-   */
+    const now = ctx.currentTime;
+
+    gain.gain.cancelScheduledValues(now);
+
+    gain.gain.setValueAtTime(gain.gain.value, now);
+
+    gain.gain.linearRampToValueAtTime(0, now + RELEASE);
+  }
 
   return {
     start,
