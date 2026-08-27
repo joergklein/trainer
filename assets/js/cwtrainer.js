@@ -60,11 +60,6 @@ let currentCharacter = 0;
 let running = false;
 let paused = false;
 let timer = null;
-
-/*
- * Verhindert, dass ein alter asynchroner Ablauf
- * nach Stop / Reset wieder in das Training hineinläuft.
- */
 let trainingGeneration = 0;
 
 /* ============================================================
@@ -181,10 +176,6 @@ function clearTimer() {
   }
 }
 
-/*
- * Prüft, ob ein Callback noch zum aktuellen
- * Trainingslauf gehört.
- */
 function isGenerationActive(generation) {
   return running && generation === trainingGeneration;
 }
@@ -208,6 +199,7 @@ function parseCSVLine(line) {
       } else {
         quoted = !quoted;
       }
+
       continue;
     }
 
@@ -238,7 +230,6 @@ function parseCSV(text) {
   const header = parseCSVLine(lines[0]).map((value) => value.toLowerCase());
 
   const abbreviationIndex = header.indexOf("abbreviation");
-
   const meaningIndex = header.indexOf("meaning");
 
   if (abbreviationIndex === -1 || meaningIndex === -1) {
@@ -246,7 +237,6 @@ function parseCSV(text) {
   }
 
   const result = [];
-
   const requiredIndex = Math.max(abbreviationIndex, meaningIndex);
 
   for (let i = 1; i < lines.length; i++) {
@@ -303,15 +293,12 @@ function renderCustomFiles() {
 
   for (const file of customFiles) {
     const row = document.createElement("div");
-
     row.className = "custom-file";
 
     const name = document.createElement("span");
-
     name.textContent = file.name;
 
     const removeButton = document.createElement("button");
-
     removeButton.type = "button";
     removeButton.textContent = "Remove";
 
@@ -320,14 +307,12 @@ function renderCustomFiles() {
     });
 
     row.append(name, removeButton);
-
     customFilesElement.appendChild(row);
   }
 }
 
 async function addCustomFile(file) {
   const data = parseCSV(await file.text());
-
   const name = file.name.replace(/\.csv$/i, "");
 
   const id = "custom-" + Date.now() + "-" + Math.random().toString(36).slice(2);
@@ -392,10 +377,8 @@ function rebuildMethods(selectId = null) {
 
   if (allMethods.length === 0) {
     currentMethod = null;
-
     populateLessons();
     updateCharacters();
-
     return;
   }
 
@@ -423,7 +406,6 @@ async function loadAbbreviations() {
     }
 
     abbreviationData = file.data.slice();
-
     return;
   }
 
@@ -476,7 +458,6 @@ async function selectMethod() {
   }
 
   updateCharacters();
-
   setStatus("Ready");
 }
 
@@ -509,7 +490,6 @@ function populateLessons() {
 
 function selectLesson() {
   const value = Number(lessonSelect.value);
-
   const count = getLessonCount();
 
   currentLesson =
@@ -519,7 +499,6 @@ function selectLesson() {
 
   resetTraining();
   updateCharacters();
-
   setStatus("Ready");
 }
 
@@ -551,7 +530,6 @@ function updateCharacters() {
 
 function getGroupSettings() {
   let groups = parseInt(groupsInput.value, 10);
-
   let groupSize = parseInt(groupSizeInput.value, 10);
 
   if (!Number.isFinite(groups) || groups < 1) {
@@ -682,13 +660,6 @@ async function startAudio() {
   await INCWAudio.start();
 }
 
-/*
- * Audio nicht mehr mitten in einem Ton
- * hart abbrechen.
- *
- * INCWAudio.stop() darf nur als globaler
- * Trainingsstopp verwendet werden.
- */
 function stopAudio() {
   if (
     typeof INCWAudio !== "undefined" &&
@@ -702,15 +673,6 @@ function stopAudio() {
   }
 }
 
-/*
- * Einen Dit/Dah abspielen.
- *
- * Der Ton selbst wird von INCWAudio vollständig
- * im AudioContext geplant.
- *
- * Der Timer hier dient ausschließlich dazu,
- * die Trainingslogik weiterzuschalten.
- */
 function playTone(duration, finished, generation) {
   if (!isGenerationActive(generation)) {
     return;
@@ -732,7 +694,6 @@ function playTone(duration, finished, generation) {
     console.error(error);
 
     stopTraining();
-
     setStatus("Audio error: " + error.message);
 
     return;
@@ -960,7 +921,6 @@ function sendNextCharacter(generation = trainingGeneration) {
   }
 
   playedSequence.push(character);
-
   updateProgress();
 
   sendMorse(
@@ -985,12 +945,10 @@ function sendNextAbbreviation(generation = trainingGeneration) {
 
   if (entry === null) {
     sendNextAbbreviation(generation);
-
     return;
   }
 
   playedSequence.push(entry);
-
   updateProgress();
 
   sendAbbreviation(
@@ -1034,7 +992,6 @@ function buildSolutionText() {
 
 function updateProgress() {
   const total = countTrainingItems();
-
   const current = playedSequence.length;
 
   counterElement.textContent = current + " / " + total;
@@ -1059,7 +1016,6 @@ function showSolution() {
 async function startTraining() {
   if (!currentMethod) {
     setStatus("No training set selected.");
-
     return;
   }
 
@@ -1067,7 +1023,6 @@ async function startTraining() {
 
   if (trainingSequence.length === 0) {
     setStatus("No training data available.");
-
     return;
   }
 
@@ -1075,20 +1030,12 @@ async function startTraining() {
     await startAudio();
   } catch (error) {
     console.error(error);
-
     setStatus(error.message);
-
     return;
   }
 
   clearTimer();
 
-  /*
-   * Neuer Trainingslauf.
-   *
-   * Alle alten Callbacks werden damit
-   * automatisch ungültig.
-   */
   trainingGeneration++;
 
   const generation = trainingGeneration;
@@ -1128,7 +1075,6 @@ async function startTraining() {
       }
 
       setStatus("Training");
-
       sendNext(generation);
     }, generation);
   }, generation);
@@ -1140,23 +1086,12 @@ function togglePause() {
   }
 
   if (!paused) {
-    /*
-     * Der aktuelle JavaScript-Timer wird gelöscht.
-     *
-     * Wichtig:
-     * Wir rufen hier NICHT INCWAudio.stop()
-     * auf. Ein hartes Abbrechen einer gerade
-     * laufenden Audioquelle kann selbst einen
-     * Knackser erzeugen.
-     */
     paused = true;
-
     clearTimer();
 
     pauseButton.textContent = "▶ Resume";
 
     setStatus("Paused");
-
     return;
   }
 
@@ -1166,37 +1101,18 @@ function togglePause() {
 
   setStatus("Training");
 
-  /*
-   * Der aktuelle Ablauf wird über den
-   * vorhandenen Callback wieder aufgenommen.
-   */
   if (timer === null) {
-    /*
-     * Der laufende Ton darf bereits beendet sein.
-     * Deshalb wird die Trainingslogik über
-     * sendNext() fortgesetzt.
-     */
     sendNext(trainingGeneration);
   }
 }
 
 function stopTraining() {
-  /*
-   * Zuerst alle alten Callbacks ungültig machen.
-   */
   trainingGeneration++;
 
   running = false;
   paused = false;
 
   clearTimer();
-
-  /*
-   * Globaler Stop nur beim echten Stop.
-   *
-   * Die Audio-Implementierung muss diesen Stop
-   * weich behandeln.
-   */
   stopAudio();
 
   solutionElement.textContent = buildSolutionText();
@@ -1228,22 +1144,10 @@ function finishTraining(generation = trainingGeneration) {
         return;
       }
 
-      /*
-       * Erst jetzt ist der Trainingsablauf
-       * wirklich beendet.
-       */
       running = false;
       paused = false;
 
       clearTimer();
-
-      /*
-       * Der letzte Ton ist bereits beendet,
-       * bevor dieser Callback erreicht wird.
-       *
-       * Daher erzeugt stopAudio() hier keinen
-       * zusätzlichen Ton.
-       */
       stopAudio();
 
       startButton.disabled = false;
@@ -1272,22 +1176,16 @@ function finishTraining(generation = trainingGeneration) {
 }
 
 function resetTraining() {
-  /*
-   * Alle bisherigen asynchronen
-   * Trainingsabläufe invalidieren.
-   */
   trainingGeneration++;
 
   running = false;
   paused = false;
 
   clearTimer();
-
   stopAudio();
 
   trainingSequence = [];
   playedSequence = [];
-
   currentCharacter = 0;
 
   startButton.disabled = false;
@@ -1302,7 +1200,6 @@ function resetTraining() {
   solutionElement.textContent = "";
 
   progressBar.style.width = "0%";
-
   counterElement.textContent = "0 / 0";
 }
 
@@ -1314,9 +1211,7 @@ async function loadIndex() {
   try {
     setStatus("Loading methods ...");
 
-    const response = await fetch("text/index.json", {
-      cache: "no-store",
-    });
+    const response = await fetch("text/index.json", { cache: "no-store" });
 
     if (!response.ok) {
       throw new Error("HTTP " + response.status);
@@ -1331,7 +1226,6 @@ async function loadIndex() {
     methods = data.methods;
 
     rebuildMethods();
-
     setStatus("Ready");
   } catch (error) {
     console.error(error);
@@ -1392,7 +1286,6 @@ document.addEventListener("keydown", (event) => {
     tag !== "BUTTON"
   ) {
     event.preventDefault();
-
     togglePause();
   }
 

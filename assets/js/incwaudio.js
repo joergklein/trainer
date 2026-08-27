@@ -1,27 +1,16 @@
 "use strict";
 
-/*
- * INCW AUDIO
- *
- * Jeder Ton wird als eigene Audioquelle erzeugt.
- *
- * Wichtig:
- * - kein dauerhaft laufender Oszillator
- * - kein harter Gain-Sprung
- * - kein wiederverwendeter Oszillator
- * - Tonanfang und Tonende werden im AudioContext geplant
- */
-
 const INCWAudio = (() => {
   let ctx = null;
+  let sequence = [];
+  let activeSource = null;
 
-  const ATTACK = 0.01;
-  const RELEASE = 0.02;
+  const ATTACK = 0.008;
+  const RELEASE = 0.012;
 
   const DEFAULT_FREQUENCY = 600;
   const DEFAULT_VOLUME = 0.3;
-
-  const activeSources = new Set();
+  const MAX_VOLUME = 0.8;
 
   function getContext() {
     if (ctx) {
@@ -35,7 +24,6 @@ const INCWAudio = (() => {
     }
 
     ctx = new AudioContextClass();
-
     return ctx;
   }
 
@@ -46,11 +34,12 @@ const INCWAudio = (() => {
       await audio.resume();
     }
 
+    sequence = [];
     return audio;
   }
 
-  function safeFrequency(frequency) {
-    const value = Number(frequency);
+  function safeFrequency(value) {
+    value = Number(value);
 
     if (!Number.isFinite(value)) {
       return DEFAULT_FREQUENCY;
@@ -59,8 +48,8 @@ const INCWAudio = (() => {
     return Math.max(100, Math.min(2000, value));
   }
 
-  function safeDuration(duration) {
-    const value = Number(duration);
+  function safeDuration(value) {
+    value = Number(value);
 
     if (!Number.isFinite(value)) {
       return 0.001;
@@ -69,149 +58,137 @@ const INCWAudio = (() => {
     return Math.max(0.001, value);
   }
 
-  function safeVolume(volume) {
-    const value = Number(volume);
+  function safeVolume(value) {
+    value = Number(value);
 
     if (!Number.isFinite(value)) {
       return DEFAULT_VOLUME;
     }
 
-    return Math.max(0, Math.min(0.8, value));
+    return Math.max(0, Math.min(MAX_VOLUME, value));
   }
 
   function tone(frequency, duration, volume) {
     const audio = getContext();
 
-    /*
-     * Der AudioContext muss vorher durch start()
-     * aktiviert worden sein.
-     */
     if (audio.state === "suspended") {
       return;
     }
 
     const safeFreq = safeFrequency(frequency);
-
-    /*
-     * WICHTIG:
-     *
-     * Nicht "safeDuration" als Variablenname
-     * verwenden, weil gleichnamige Funktion existiert.
-     */
-    const durationSeconds = safeDuration(duration);
-
+    const safeDurationSeconds = safeDuration(duration);
     const safeVol = safeVolume(volume);
 
-    /*
-     * Eigener Oszillator für genau diesen Ton.
-     */
-    const oscillator = audio.createOscillator();
+    if (safeVol <= 0) {
+      return;
+    }
 
-    /*
-     * Eigene Hüllkurve für genau diesen Ton.
-     */
-    const envelope = audio.createGain();
+    sequence.push({
+      frequency: safeFreq,
+      duration: safeDurationSeconds,
+      volume: safeVol,
+    });
 
-    oscillator.type = "sine";
+    scheduleSequence();
+  }
 
-    const now = audio.currentTime;
+  function scheduleSequence() {
+    const audio = getContext();
 
-    /*
-     * Kleiner zeitlicher Vorlauf.
-     *
-     * Der Ton wird von Web Audio geplant,
-     * nicht von JavaScript verzögert gestartet.
-     */
-    const startTime = now + 0.005;
+    if (audio.state === "suspended" || sequence.length === 0 || activeSource) {
+      return;
+    }
 
-    const endTime = startTime + durationSeconds;
+    const items = sequence;
+    sequence = [];
 
-    const attack = Math.min(ATTACK, durationSeconds / 3);
+    let totalDuration = 0;
 
-    const release = Math.min(RELEASE, durationSeconds / 3);
+    for (const item of items) {
+      totalDuration += item.duration;
+    }
 
-    const attackEnd = startTime + attack;
+    if (totalDuration <= 0) {
+      return;
+    }
 
-    const releaseStart = endTime - release;
+    const sampleRate = audio.sampleRate;
+    const frameCount = Math.max(1, Math.ceil(totalDuration * sampleRate));
 
-    oscillator.frequency.setValueAtTime(safeFreq, startTime);
+    const buffer = audio.createBuffer(1, frameCount, sampleRate);
 
-    /*
-     * Beginn garantiert bei 0.
-     */
-    envelope.gain.setValueAtTime(0, startTime);
+    const data = buffer.getChannelData(0);
 
-    /*
-     * Weiches Einschwingen.
-     */
-    envelope.gain.linearRampToValueAtTime(safeVol, attackEnd);
+    let offset = 0;
 
-    /*
-     * Lautstärke halten.
-     */
-    envelope.gain.setValueAtTime(safeVol, releaseStart);
+    for (const item of items) {
+      const frames = Math.max(1, Math.floor(item.duration * sampleRate));
 
-    /*
-     * Weiches Ausschwingen.
-     */
-    envelope.gain.linearRampToValueAtTime(0, endTime);
+      const attackFrames = Math.max(
+        1,
+        Math.floor(Math.min(ATTACK, item.duration / 3) * sampleRate),
+      );
 
-    oscillator.connect(envelope);
-    envelope.connect(audio.destination);
+      const releaseFrames = Math.max(
+        1,
+        Math.floor(Math.min(RELEASE, item.duration / 3) * sampleRate),
+      );
 
-    /*
-     * Quelle registrieren.
-     */
-    activeSources.add(oscillator);
+      const releaseStart = Math.max(0, frames - releaseFrames);
 
-    oscillator.addEventListener(
+      for (let i = 0; i < frames && offset + i < data.length; i++) {
+        const sine = Math.sin(2 * Math.PI * item.frequency * (i / sampleRate));
+
+        let envelope = 1;
+
+        if (i < attackFrames) {
+          envelope = i / attackFrames;
+        }
+
+        if (i >= releaseStart) {
+          envelope = Math.min(envelope, (frames - i) / releaseFrames);
+        }
+
+        data[offset + i] =
+          sine * Math.max(0, Math.min(1, envelope)) * item.volume;
+      }
+
+      offset += frames;
+    }
+
+    const source = audio.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audio.destination);
+
+    activeSource = source;
+
+    source.addEventListener(
       "ended",
       () => {
-        activeSources.delete(oscillator);
-
-        try {
-          oscillator.disconnect();
-        } catch (error) {
-          console.error(error);
+        if (activeSource === source) {
+          activeSource = null;
+          scheduleSequence();
         }
 
         try {
-          envelope.disconnect();
-        } catch (error) {
-          console.error(error);
+          source.disconnect();
+        } catch {
+          // Bereits getrennt.
         }
       },
       { once: true },
     );
 
-    /*
-     * Start und Ende ausschließlich
-     * über die Audio-Zeitachse.
-     */
-    oscillator.start(startTime);
-    oscillator.stop(endTime);
+    source.start(audio.currentTime + 0.01);
   }
 
   function stop() {
     /*
-     * Bereits geplante Quellen beenden.
-     *
-     * Keine neue Audioquelle.
-     * Kein Gain-Sprung.
-     * Kein zusätzlicher Ton.
+     * Keine laufende Quelle abrupt beenden.
+     * Dadurch bleibt das Signal knackfrei.
      */
 
-    for (const oscillator of activeSources) {
-      try {
-        oscillator.stop();
-      } catch (error) {
-        /*
-         * Bereits beendete Quellen ignorieren.
-         */
-      }
-    }
-
-    activeSources.clear();
+    sequence = [];
   }
 
   return {
