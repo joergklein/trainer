@@ -87,7 +87,7 @@ const INCWAudio = (() => {
 
     oscillator.type = "sine";
 
-    const startTime = audio.currentTime + 0.005;
+    const startTime = audio.currentTime;
     const endTime = startTime + durationSeconds;
 
     const attack = Math.min(ATTACK, durationSeconds / 3);
