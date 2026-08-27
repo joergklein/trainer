@@ -3,7 +3,11 @@
 /*
  * CW TRAINER
  * Audio: incwaudio.js
- * API: INCWAudio.start(), INCWAudio.tone(), INCWAudio.stop()
+ *
+ * API:
+ *   INCWAudio.start()
+ *   INCWAudio.tone()
+ *   INCWAudio.stop()
  */
 
 /* ============================================================
@@ -56,6 +60,12 @@ let currentCharacter = 0;
 let running = false;
 let paused = false;
 let timer = null;
+
+/*
+ * Verhindert, dass ein alter asynchroner Ablauf
+ * nach Stop / Reset wieder in das Training hineinläuft.
+ */
+let trainingGeneration = 0;
 
 /* ============================================================
    MORSE
@@ -165,10 +175,18 @@ function getAvailableAbbreviations() {
 }
 
 function clearTimer() {
-  if (timer) {
+  if (timer !== null) {
     clearTimeout(timer);
     timer = null;
   }
+}
+
+/*
+ * Prüft, ob ein Callback noch zum aktuellen
+ * Trainingslauf gehört.
+ */
+function isGenerationActive(generation) {
+  return running && generation === trainingGeneration;
 }
 
 /* ============================================================
@@ -203,6 +221,7 @@ function parseCSVLine(line) {
   }
 
   values.push(value.trim());
+
   return values;
 }
 
@@ -219,6 +238,7 @@ function parseCSV(text) {
   const header = parseCSVLine(lines[0]).map((value) => value.toLowerCase());
 
   const abbreviationIndex = header.indexOf("abbreviation");
+
   const meaningIndex = header.indexOf("meaning");
 
   if (abbreviationIndex === -1 || meaningIndex === -1) {
@@ -226,6 +246,7 @@ function parseCSV(text) {
   }
 
   const result = [];
+
   const requiredIndex = Math.max(abbreviationIndex, meaningIndex);
 
   for (let i = 1; i < lines.length; i++) {
@@ -236,13 +257,17 @@ function parseCSV(text) {
     }
 
     const abbreviation = values[abbreviationIndex].trim();
+
     const meaning = values[meaningIndex].trim();
 
     if (!abbreviation) {
       continue;
     }
 
-    result.push({ abbreviation, meaning });
+    result.push({
+      abbreviation,
+      meaning,
+    });
   }
 
   if (result.length === 0) {
@@ -278,30 +303,40 @@ function renderCustomFiles() {
 
   for (const file of customFiles) {
     const row = document.createElement("div");
+
     row.className = "custom-file";
 
     const name = document.createElement("span");
+
     name.textContent = file.name;
 
     const removeButton = document.createElement("button");
+
     removeButton.type = "button";
     removeButton.textContent = "Remove";
+
     removeButton.addEventListener("click", () => {
       removeCustomFile(file.id);
     });
 
     row.append(name, removeButton);
+
     customFilesElement.appendChild(row);
   }
 }
 
 async function addCustomFile(file) {
   const data = parseCSV(await file.text());
+
   const name = file.name.replace(/\.csv$/i, "");
 
   const id = "custom-" + Date.now() + "-" + Math.random().toString(36).slice(2);
 
-  customFiles.push({ id, name, data });
+  customFiles.push({
+    id,
+    name,
+    data,
+  });
 
   renderCustomFiles();
   rebuildMethods(id);
@@ -348,6 +383,7 @@ function rebuildMethods(selectId = null) {
     }
 
     const option = document.createElement("option");
+
     option.value = method.id;
     option.textContent = method.name || method.id;
 
@@ -356,8 +392,10 @@ function rebuildMethods(selectId = null) {
 
   if (allMethods.length === 0) {
     currentMethod = null;
+
     populateLessons();
     updateCharacters();
+
     return;
   }
 
@@ -385,6 +423,7 @@ async function loadAbbreviations() {
     }
 
     abbreviationData = file.data.slice();
+
     return;
   }
 
@@ -419,6 +458,7 @@ async function selectMethod() {
     await loadAbbreviations();
   } catch (error) {
     console.error(error);
+
     abbreviationData = [];
 
     populateLessons();
@@ -436,6 +476,7 @@ async function selectMethod() {
   }
 
   updateCharacters();
+
   setStatus("Ready");
 }
 
@@ -458,6 +499,7 @@ function populateLessons() {
 
   for (let i = 1; i <= getLessonCount(); i++) {
     const option = document.createElement("option");
+
     option.value = String(i);
     option.textContent = "Lesson " + i;
 
@@ -467,6 +509,7 @@ function populateLessons() {
 
 function selectLesson() {
   const value = Number(lessonSelect.value);
+
   const count = getLessonCount();
 
   currentLesson =
@@ -476,6 +519,7 @@ function selectLesson() {
 
   resetTraining();
   updateCharacters();
+
   setStatus("Ready");
 }
 
@@ -507,6 +551,7 @@ function updateCharacters() {
 
 function getGroupSettings() {
   let groups = parseInt(groupsInput.value, 10);
+
   let groupSize = parseInt(groupSizeInput.value, 10);
 
   if (!Number.isFinite(groups) || groups < 1) {
@@ -517,7 +562,10 @@ function getGroupSettings() {
     groupSize = 5;
   }
 
-  return { groups, groupSize };
+  return {
+    groups,
+    groupSize,
+  };
 }
 
 function dotMilliseconds() {
@@ -562,6 +610,7 @@ function createCharacterSequence() {
   }
 
   const { groups, groupSize } = getGroupSettings();
+
   const sequence = [];
 
   for (let group = 0; group < groups; group++) {
@@ -587,6 +636,7 @@ function createAbbreviationSequence() {
   }
 
   const { groups, groupSize } = getGroupSettings();
+
   const sequence = [];
 
   for (let group = 0; group < groups; group++) {
@@ -632,6 +682,13 @@ async function startAudio() {
   await INCWAudio.start();
 }
 
+/*
+ * Audio nicht mehr mitten in einem Ton
+ * hart abbrechen.
+ *
+ * INCWAudio.stop() darf nur als globaler
+ * Trainingsstopp verwendet werden.
+ */
 function stopAudio() {
   if (
     typeof INCWAudio !== "undefined" &&
@@ -645,15 +702,25 @@ function stopAudio() {
   }
 }
 
-function playTone(duration, finished) {
-  if (!running) {
+/*
+ * Einen Dit/Dah abspielen.
+ *
+ * Der Ton selbst wird von INCWAudio vollständig
+ * im AudioContext geplant.
+ *
+ * Der Timer hier dient ausschließlich dazu,
+ * die Trainingslogik weiterzuschalten.
+ */
+function playTone(duration, finished, generation) {
+  if (!isGenerationActive(generation)) {
     return;
   }
 
   if (paused) {
     timer = setTimeout(() => {
       timer = null;
-      playTone(duration, finished);
+
+      playTone(duration, finished, generation);
     }, 50);
 
     return;
@@ -663,33 +730,37 @@ function playTone(duration, finished) {
     INCWAudio.tone(getToneFrequency(), duration / 1000, getVolume());
   } catch (error) {
     console.error(error);
+
     stopTraining();
+
     setStatus("Audio error: " + error.message);
+
     return;
   }
 
   timer = setTimeout(() => {
     timer = null;
 
-    if (running) {
+    if (isGenerationActive(generation)) {
       finished();
     }
   }, duration);
 }
 
 /* ============================================================
-   MORSE PLAYBACK
+   WAIT
    ============================================================ */
 
-function waitUnits(units, finished) {
-  if (!running) {
+function waitUnits(units, finished, generation) {
+  if (!isGenerationActive(generation)) {
     return;
   }
 
   if (paused) {
     timer = setTimeout(() => {
       timer = null;
-      waitUnits(units, finished);
+
+      waitUnits(units, finished, generation);
     }, 50);
 
     return;
@@ -698,21 +769,31 @@ function waitUnits(units, finished) {
   timer = setTimeout(() => {
     timer = null;
 
-    if (running) {
+    if (isGenerationActive(generation)) {
       finished();
     }
   }, dotMilliseconds() * units);
 }
 
-function sendCode(code, finished, trailingGap = CW_CHARACTER_GAP) {
-  if (!running) {
+/* ============================================================
+   MORSE PLAYBACK
+   ============================================================ */
+
+function sendCode(
+  code,
+  finished,
+  trailingGap = CW_CHARACTER_GAP,
+  generation = trainingGeneration,
+) {
+  if (!isGenerationActive(generation)) {
     return;
   }
 
   if (paused) {
     timer = setTimeout(() => {
       timer = null;
-      sendCode(code, finished, trailingGap);
+
+      sendCode(code, finished, trailingGap, generation);
     }, 50);
 
     return;
@@ -726,7 +807,7 @@ function sendCode(code, finished, trailingGap = CW_CHARACTER_GAP) {
   let index = 0;
 
   function nextElement() {
-    if (!running) {
+    if (!isGenerationActive(generation)) {
       return;
     }
 
@@ -740,42 +821,58 @@ function sendCode(code, finished, trailingGap = CW_CHARACTER_GAP) {
     }
 
     if (index >= code.length) {
-      waitUnits(trailingGap, finished);
+      waitUnits(trailingGap, finished, generation);
+
       return;
     }
 
     const symbol = code[index++];
+
     const duration = dotMilliseconds() * (symbol === "-" ? CW_DAH : CW_DIT);
 
-    playTone(duration, () => {
-      if (!running) {
-        return;
-      }
+    playTone(
+      duration,
+      () => {
+        if (!isGenerationActive(generation)) {
+          return;
+        }
 
-      if (index < code.length) {
-        waitUnits(CW_ELEMENT_GAP, nextElement);
-      } else {
-        waitUnits(trailingGap, finished);
-      }
-    });
+        if (index < code.length) {
+          waitUnits(CW_ELEMENT_GAP, nextElement, generation);
+        } else {
+          waitUnits(trailingGap, finished, generation);
+        }
+      },
+      generation,
+    );
   }
 
   nextElement();
 }
 
-function sendMorse(character, finished, trailingGap = CW_CHARACTER_GAP) {
+function sendMorse(
+  character,
+  finished,
+  trailingGap = CW_CHARACTER_GAP,
+  generation = trainingGeneration,
+) {
   const code = MORSE[String(character).toUpperCase()];
 
   if (!code) {
     console.warn("No Morse code for:", character);
+
     finished();
     return;
   }
 
-  sendCode(code, finished, trailingGap);
+  sendCode(code, finished, trailingGap, generation);
 }
 
-function sendAbbreviation(abbreviation, finished) {
+function sendAbbreviation(
+  abbreviation,
+  finished,
+  generation = trainingGeneration,
+) {
   const characters = Array.from(String(abbreviation));
 
   if (characters.length === 0) {
@@ -786,7 +883,7 @@ function sendAbbreviation(abbreviation, finished) {
   let index = 0;
 
   function nextCharacter() {
-    if (!running) {
+    if (!isGenerationActive(generation)) {
       return;
     }
 
@@ -805,89 +902,109 @@ function sendAbbreviation(abbreviation, finished) {
     }
 
     const character = characters[index++];
+
     const gap = index >= characters.length ? CW_WORD_GAP : CW_CHARACTER_GAP;
 
-    sendMorse(character, nextCharacter, gap);
+    sendMorse(character, nextCharacter, gap, generation);
   }
 
   nextCharacter();
 }
 
-function sendVVV(finished) {
+function sendVVV(finished, generation = trainingGeneration) {
   sendMorse(
     "V",
     () => {
       sendMorse(
         "V",
         () => {
-          sendMorse("V", finished, CW_WORD_GAP);
+          sendMorse("V", finished, CW_WORD_GAP, generation);
         },
         CW_CHARACTER_GAP,
+        generation,
       );
     },
     CW_CHARACTER_GAP,
+    generation,
   );
 }
 
-function sendKA(finished) {
-  sendCode(CW_BEGIN_PROSIGN, finished, CW_WORD_GAP);
+function sendKA(finished, generation = trainingGeneration) {
+  sendCode(CW_BEGIN_PROSIGN, finished, CW_WORD_GAP, generation);
 }
 
 /* ============================================================
    TRAINING PLAYBACK
    ============================================================ */
 
-function sendNextCharacter() {
-  if (!running) {
+function sendNextCharacter(generation = trainingGeneration) {
+  if (!isGenerationActive(generation)) {
     return;
   }
 
   if (currentCharacter >= trainingSequence.length) {
-    finishTraining();
+    finishTraining(generation);
     return;
   }
 
   const character = trainingSequence[currentCharacter++];
 
   if (character === " ") {
-    waitUnits(CW_WORD_GAP_EXTRA, sendNextCharacter);
+    waitUnits(
+      CW_WORD_GAP_EXTRA,
+      () => sendNextCharacter(generation),
+      generation,
+    );
+
     return;
   }
 
   playedSequence.push(character);
+
   updateProgress();
 
-  sendMorse(character, sendNextCharacter, CW_CHARACTER_GAP);
+  sendMorse(
+    character,
+    () => sendNextCharacter(generation),
+    CW_CHARACTER_GAP,
+    generation,
+  );
 }
 
-function sendNextAbbreviation() {
-  if (!running) {
+function sendNextAbbreviation(generation = trainingGeneration) {
+  if (!isGenerationActive(generation)) {
     return;
   }
 
   if (currentCharacter >= trainingSequence.length) {
-    finishTraining();
+    finishTraining(generation);
     return;
   }
 
   const entry = trainingSequence[currentCharacter++];
 
   if (entry === null) {
-    sendNextAbbreviation();
+    sendNextAbbreviation(generation);
+
     return;
   }
 
   playedSequence.push(entry);
+
   updateProgress();
 
-  sendAbbreviation(entry.abbreviation, sendNextAbbreviation);
+  sendAbbreviation(
+    entry.abbreviation,
+    () => sendNextAbbreviation(generation),
+    generation,
+  );
 }
 
-function sendNext() {
+function sendNext(generation = trainingGeneration) {
   if (isAbbreviationMethod()) {
-    sendNextAbbreviation();
+    sendNextAbbreviation(generation);
   } else {
-    sendNextCharacter();
+    sendNextCharacter(generation);
   }
 }
 
@@ -905,6 +1022,7 @@ function buildSolutionText() {
   }
 
   const { groupSize } = getGroupSettings();
+
   const groups = [];
 
   for (let i = 0; i < playedSequence.length; i += groupSize) {
@@ -916,6 +1034,7 @@ function buildSolutionText() {
 
 function updateProgress() {
   const total = countTrainingItems();
+
   const current = playedSequence.length;
 
   counterElement.textContent = current + " / " + total;
@@ -940,6 +1059,7 @@ function showSolution() {
 async function startTraining() {
   if (!currentMethod) {
     setStatus("No training set selected.");
+
     return;
   }
 
@@ -947,6 +1067,7 @@ async function startTraining() {
 
   if (trainingSequence.length === 0) {
     setStatus("No training data available.");
+
     return;
   }
 
@@ -954,11 +1075,23 @@ async function startTraining() {
     await startAudio();
   } catch (error) {
     console.error(error);
+
     setStatus(error.message);
+
     return;
   }
 
   clearTimer();
+
+  /*
+   * Neuer Trainingslauf.
+   *
+   * Alle alten Callbacks werden damit
+   * automatisch ungültig.
+   */
+  trainingGeneration++;
+
+  const generation = trainingGeneration;
 
   currentCharacter = 0;
   playedSequence = [];
@@ -971,31 +1104,34 @@ async function startTraining() {
   solutionButton.disabled = true;
 
   progressBar.style.width = "0%";
+
   counterElement.textContent = "0 / " + countTrainingItems();
 
   startButton.disabled = true;
   pauseButton.disabled = false;
   stopButton.disabled = false;
+
   pauseButton.textContent = "⏸ Pause";
 
   setStatus("VVV");
 
   sendVVV(() => {
-    if (!running) {
+    if (!isGenerationActive(generation)) {
       return;
     }
 
     setStatus("KA");
 
     sendKA(() => {
-      if (!running) {
+      if (!isGenerationActive(generation)) {
         return;
       }
 
       setStatus("Training");
-      sendNext();
-    });
-  });
+
+      sendNext(generation);
+    }, generation);
+  }, generation);
 }
 
 function togglePause() {
@@ -1004,28 +1140,63 @@ function togglePause() {
   }
 
   if (!paused) {
+    /*
+     * Der aktuelle JavaScript-Timer wird gelöscht.
+     *
+     * Wichtig:
+     * Wir rufen hier NICHT INCWAudio.stop()
+     * auf. Ein hartes Abbrechen einer gerade
+     * laufenden Audioquelle kann selbst einen
+     * Knackser erzeugen.
+     */
     paused = true;
+
     clearTimer();
-    stopAudio();
 
     pauseButton.textContent = "▶ Resume";
+
     setStatus("Paused");
+
     return;
   }
 
   paused = false;
 
   pauseButton.textContent = "⏸ Pause";
+
   setStatus("Training");
 
-  sendNext();
+  /*
+   * Der aktuelle Ablauf wird über den
+   * vorhandenen Callback wieder aufgenommen.
+   */
+  if (timer === null) {
+    /*
+     * Der laufende Ton darf bereits beendet sein.
+     * Deshalb wird die Trainingslogik über
+     * sendNext() fortgesetzt.
+     */
+    sendNext(trainingGeneration);
+  }
 }
 
 function stopTraining() {
+  /*
+   * Zuerst alle alten Callbacks ungültig machen.
+   */
+  trainingGeneration++;
+
   running = false;
   paused = false;
 
   clearTimer();
+
+  /*
+   * Globaler Stop nur beim echten Stop.
+   *
+   * Die Audio-Implementierung muss diesen Stop
+   * weich behandeln.
+   */
   stopAudio();
 
   solutionElement.textContent = buildSolutionText();
@@ -1043,8 +1214,8 @@ function stopTraining() {
   solutionButton.disabled = playedSequence.length === 0;
 }
 
-function finishTraining() {
-  if (!running) {
+function finishTraining(generation = trainingGeneration) {
+  if (!isGenerationActive(generation)) {
     return;
   }
 
@@ -1053,14 +1224,26 @@ function finishTraining() {
   sendMorse(
     CW_FINISH,
     () => {
-      if (!running) {
+      if (!isGenerationActive(generation)) {
         return;
       }
 
+      /*
+       * Erst jetzt ist der Trainingsablauf
+       * wirklich beendet.
+       */
       running = false;
       paused = false;
 
       clearTimer();
+
+      /*
+       * Der letzte Ton ist bereits beendet,
+       * bevor dieser Callback erreicht wird.
+       *
+       * Daher erzeugt stopAudio() hier keinen
+       * zusätzlichen Ton.
+       */
       stopAudio();
 
       startButton.disabled = false;
@@ -1084,18 +1267,27 @@ function finishTraining() {
       solutionButton.disabled = playedSequence.length === 0;
     },
     0,
+    generation,
   );
 }
 
 function resetTraining() {
+  /*
+   * Alle bisherigen asynchronen
+   * Trainingsabläufe invalidieren.
+   */
+  trainingGeneration++;
+
   running = false;
   paused = false;
 
   clearTimer();
+
   stopAudio();
 
   trainingSequence = [];
   playedSequence = [];
+
   currentCharacter = 0;
 
   startButton.disabled = false;
@@ -1105,10 +1297,12 @@ function resetTraining() {
   pauseButton.textContent = "⏸ Pause";
 
   solutionButton.disabled = true;
+
   solutionElement.hidden = true;
   solutionElement.textContent = "";
 
   progressBar.style.width = "0%";
+
   counterElement.textContent = "0 / 0";
 }
 
@@ -1120,7 +1314,9 @@ async function loadIndex() {
   try {
     setStatus("Loading methods ...");
 
-    const response = await fetch("text/index.json", { cache: "no-store" });
+    const response = await fetch("text/index.json", {
+      cache: "no-store",
+    });
 
     if (!response.ok) {
       throw new Error("HTTP " + response.status);
@@ -1135,9 +1331,11 @@ async function loadIndex() {
     methods = data.methods;
 
     rebuildMethods();
+
     setStatus("Ready");
   } catch (error) {
     console.error(error);
+
     setStatus("Error loading: " + error.message);
   }
 }
@@ -1160,6 +1358,7 @@ if (customFileInput) {
       await addCustomFile(file);
     } catch (error) {
       console.error(error);
+
       setStatus("Error loading CSV: " + error.message);
     }
 
@@ -1193,6 +1392,7 @@ document.addEventListener("keydown", (event) => {
     tag !== "BUTTON"
   ) {
     event.preventDefault();
+
     togglePause();
   }
 

@@ -1,12 +1,27 @@
 "use strict";
 
+/*
+ * INCW AUDIO
+ *
+ * Jeder Ton wird als eigene Audioquelle erzeugt.
+ *
+ * Wichtig:
+ * - kein dauerhaft laufender Oszillator
+ * - kein harter Gain-Sprung
+ * - kein wiederverwendeter Oszillator
+ * - Tonanfang und Tonende werden im AudioContext geplant
+ */
+
 const INCWAudio = (() => {
   let ctx = null;
-  let oscillator = null;
-  let gain = null;
 
-  const ATTACK = 0.008;
-  const RELEASE = 0.012;
+  const ATTACK = 0.01;
+  const RELEASE = 0.02;
+
+  const DEFAULT_FREQUENCY = 600;
+  const DEFAULT_VOLUME = 0.3;
+
+  const activeSources = new Set();
 
   function getContext() {
     if (ctx) {
@@ -21,33 +36,11 @@ const INCWAudio = (() => {
 
     ctx = new AudioContextClass();
 
-    oscillator = ctx.createOscillator();
-    gain = ctx.createGain();
-
-    oscillator.type = "sine";
-
-    oscillator.frequency.setValueAtTime(600, ctx.currentTime);
-
-    gain.gain.setValueAtTime(0, ctx.currentTime);
-
-    oscillator.connect(gain);
-    gain.connect(ctx.destination);
-
-    oscillator.start();
-
     return ctx;
   }
 
   async function start() {
     const audio = getContext();
-
-    const now = audio.currentTime;
-
-    /*
-     * Vor dem Start garantiert stumm.
-     */
-    gain.gain.cancelScheduledValues(now);
-    gain.gain.setValueAtTime(0, now);
 
     if (audio.state === "suspended") {
       await audio.resume();
@@ -56,77 +49,169 @@ const INCWAudio = (() => {
     return audio;
   }
 
+  function safeFrequency(frequency) {
+    const value = Number(frequency);
+
+    if (!Number.isFinite(value)) {
+      return DEFAULT_FREQUENCY;
+    }
+
+    return Math.max(100, Math.min(2000, value));
+  }
+
+  function safeDuration(duration) {
+    const value = Number(duration);
+
+    if (!Number.isFinite(value)) {
+      return 0.001;
+    }
+
+    return Math.max(0.001, value);
+  }
+
+  function safeVolume(volume) {
+    const value = Number(volume);
+
+    if (!Number.isFinite(value)) {
+      return DEFAULT_VOLUME;
+    }
+
+    return Math.max(0, Math.min(0.8, value));
+  }
+
   function tone(frequency, duration, volume) {
     const audio = getContext();
 
+    /*
+     * Der AudioContext muss vorher durch start()
+     * aktiviert worden sein.
+     */
     if (audio.state === "suspended") {
       return;
     }
 
-    const safeFrequency = Math.max(
-      100,
-      Math.min(2000, Number(frequency) || 600),
-    );
+    const safeFreq = safeFrequency(frequency);
 
-    const safeDuration = Math.max(0.001, Number(duration) || 0.001);
+    /*
+     * WICHTIG:
+     *
+     * Nicht "safeDuration" als Variablenname
+     * verwenden, weil gleichnamige Funktion existiert.
+     */
+    const durationSeconds = safeDuration(duration);
 
-    const safeVolume = Math.max(0, Math.min(1, Number(volume) || 0));
+    const safeVol = safeVolume(volume);
+
+    /*
+     * Eigener Oszillator für genau diesen Ton.
+     */
+    const oscillator = audio.createOscillator();
+
+    /*
+     * Eigene Hüllkurve für genau diesen Ton.
+     */
+    const envelope = audio.createGain();
+
+    oscillator.type = "sine";
 
     const now = audio.currentTime;
 
-    const attack = Math.min(ATTACK, safeDuration / 3);
+    /*
+     * Kleiner zeitlicher Vorlauf.
+     *
+     * Der Ton wird von Web Audio geplant,
+     * nicht von JavaScript verzögert gestartet.
+     */
+    const startTime = now + 0.005;
 
-    const release = Math.min(RELEASE, safeDuration / 3);
+    const endTime = startTime + durationSeconds;
 
-    const end = now + safeDuration;
+    const attack = Math.min(ATTACK, durationSeconds / 3);
 
-    const releaseStart = Math.max(now + attack, end - release);
+    const release = Math.min(RELEASE, durationSeconds / 3);
+
+    const attackEnd = startTime + attack;
+
+    const releaseStart = endTime - release;
+
+    oscillator.frequency.setValueAtTime(safeFreq, startTime);
 
     /*
-     * Frequenz ändern, aber Oszillator NICHT neu starten.
+     * Beginn garantiert bei 0.
      */
-    oscillator.frequency.cancelScheduledValues(now);
-
-    oscillator.frequency.setValueAtTime(safeFrequency, now);
+    envelope.gain.setValueAtTime(0, startTime);
 
     /*
-     * Alten Gain-Zeitplan entfernen.
+     * Weiches Einschwingen.
      */
-    gain.gain.cancelScheduledValues(now);
+    envelope.gain.linearRampToValueAtTime(safeVol, attackEnd);
 
     /*
-     * Immer von STILLE starten.
+     * Lautstärke halten.
      */
-    gain.gain.setValueAtTime(0, now);
+    envelope.gain.setValueAtTime(safeVol, releaseStart);
 
     /*
-     * TON EIN
+     * Weiches Ausschwingen.
      */
-    gain.gain.linearRampToValueAtTime(safeVolume, now + attack);
+    envelope.gain.linearRampToValueAtTime(0, endTime);
+
+    oscillator.connect(envelope);
+    envelope.connect(audio.destination);
 
     /*
-     * TON HALTEN
+     * Quelle registrieren.
      */
-    gain.gain.setValueAtTime(safeVolume, releaseStart);
+    activeSources.add(oscillator);
+
+    oscillator.addEventListener(
+      "ended",
+      () => {
+        activeSources.delete(oscillator);
+
+        try {
+          oscillator.disconnect();
+        } catch (error) {
+          console.error(error);
+        }
+
+        try {
+          envelope.disconnect();
+        } catch (error) {
+          console.error(error);
+        }
+      },
+      { once: true },
+    );
 
     /*
-     * TON AUS
+     * Start und Ende ausschließlich
+     * über die Audio-Zeitachse.
      */
-    gain.gain.linearRampToValueAtTime(0, end);
+    oscillator.start(startTime);
+    oscillator.stop(endTime);
   }
 
   function stop() {
-    if (!ctx || !gain) {
-      return;
+    /*
+     * Bereits geplante Quellen beenden.
+     *
+     * Keine neue Audioquelle.
+     * Kein Gain-Sprung.
+     * Kein zusätzlicher Ton.
+     */
+
+    for (const oscillator of activeSources) {
+      try {
+        oscillator.stop();
+      } catch (error) {
+        /*
+         * Bereits beendete Quellen ignorieren.
+         */
+      }
     }
 
-    const now = ctx.currentTime;
-
-    gain.gain.cancelScheduledValues(now);
-
-    gain.gain.setValueAtTime(gain.gain.value, now);
-
-    gain.gain.linearRampToValueAtTime(0, now + RELEASE);
+    activeSources.clear();
   }
 
   return {
