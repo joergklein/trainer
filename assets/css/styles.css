@@ -291,11 +291,8 @@ input[type="range"] {
 
 .custom-files {
   display: flex;
-
   flex-direction: column;
-
   gap: 8px;
-
   margin-top: 10px;
 }
 
@@ -370,9 +367,9 @@ input[type="range"] {
   margin: 25px 0;
   padding: 20px;
 
-  background: #fafafa;
+  background: #ffffff;
 
-  border: 1px solid #cfcfcf;
+  border: 1px solid #d8d8d8;
   border-radius: 6px;
 
   font-family: "IBM Plex Mono", monospace;
@@ -655,9 +652,9 @@ button:disabled {
 
   padding: 20px;
 
-  background: #fafafa;
+  background: #ffffff;
 
-  border: 1px solid #cfcfcf;
+  border: 1px solid #d8d8d8;
   border-radius: 6px;
 
   white-space: pre-wrap;

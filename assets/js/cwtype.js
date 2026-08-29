@@ -3,22 +3,6 @@
 (() => {
   /* =========================================================
      CW TYPE
-     Visuelle Variante von cwtrainer.js
-
-     Reihenfolge:
-       VVV → KA → 5er-Gruppe → 5er-Gruppe → ... → +
-
-     Regeln:
-       - vollständige MORSE-Tabelle
-       - Morse-Timing 1:1
-       - Zeichenbreite bestimmt niemals das Timing
-       - 5er-Gruppen bleiben erhalten
-       - Gruppenabstände sind rein visuell
-       - Schrift wird vertikal exakt im Laufband zentriert
-     ========================================================= */
-
-  /* =========================================================
-     DOM
      ========================================================= */
 
   const methodSelect = document.getElementById("method");
@@ -27,6 +11,8 @@
   const groupsInput = document.getElementById("groups");
   const groupSizeInput = document.getElementById("groupSize");
   const wpmInput = document.getElementById("wpm");
+  const toneInput = document.getElementById("tone");
+  const volumeInput = document.getElementById("volume");
 
   const customFileInput = document.getElementById("custom-file");
   const customFilesElement = document.getElementById("custom-files");
@@ -38,6 +24,9 @@
   const startButton = document.getElementById("cwtype-start");
   const pauseButton = document.getElementById("cwtype-pause");
   const stopButton = document.getElementById("cwtype-stop");
+
+  const showSolutionButton = document.getElementById("show-solution");
+  const solutionElement = document.getElementById("solution");
 
   /* =========================================================
      DATA
@@ -52,11 +41,31 @@
   let abbreviationData = [];
 
   let currentGroups = [];
+  let expectedGroups = [];
   let currentTiming = [];
+
+  let typedGroups = [];
+  let currentTypedGroup = 0;
+  let currentTypedIndex = 0;
+
+  let morseInput = "";
+
+  let keyDown = false;
+  let keyDownStarted = 0;
+
+  let characterTimer = null;
+
+  /* =========================================================
+     AUDIO
+     ========================================================= */
+
+  let audioContext = null;
+  let oscillator = null;
+  let gainNode = null;
+  let audioActive = false;
 
   /* =========================================================
      MORSE
-     Referenz: cwtrainer.js
      ========================================================= */
 
   const MORSE = {
@@ -116,6 +125,10 @@
     _: "..--.-",
   };
 
+  const MORSE_REVERSE = Object.fromEntries(
+    Object.entries(MORSE).map(([character, code]) => [code, character]),
+  );
+
   /* =========================================================
      CW TIMING
      ========================================================= */
@@ -146,6 +159,266 @@
   }
 
   /* =========================================================
+     AUDIO
+     ========================================================= */
+
+  async function ensureAudio() {
+    if (!audioContext) {
+      const AudioContextClass =
+        window.AudioContext || window.webkitAudioContext;
+
+      if (!AudioContextClass) {
+        console.error("Web Audio API is not available.");
+        return false;
+      }
+
+      audioContext = new AudioContextClass();
+    }
+
+    if (audioContext.state === "suspended") {
+      try {
+        await audioContext.resume();
+      } catch (error) {
+        console.error("AudioContext resume failed:", error);
+        return false;
+      }
+    }
+
+    return audioContext.state === "running";
+  }
+
+  function getToneFrequency() {
+    const value = Number(toneInput?.value);
+
+    if (!Number.isFinite(value)) {
+      return 600;
+    }
+
+    return Math.max(100, Math.min(2000, value));
+  }
+
+  function getVolume() {
+    const value = Number(volumeInput?.value);
+
+    if (!Number.isFinite(value)) {
+      return 30;
+    }
+
+    return Math.max(0, Math.min(100, value));
+  }
+
+  async function toneStart() {
+    /*
+     * NIEMALS einen zweiten Oszillator starten,
+     * solange bereits ein Ton läuft.
+     */
+    if (audioActive) {
+      return;
+    }
+
+    const ready = await ensureAudio();
+
+    if (!ready) {
+      return;
+    }
+
+    /*
+     * Noch einmal prüfen:
+     * Während await ensureAudio() darf kein zweiter
+     * Start durch ein weiteres Event entstehen.
+     */
+    if (audioActive) {
+      return;
+    }
+
+    oscillator = audioContext.createOscillator();
+    gainNode = audioContext.createGain();
+
+    oscillator.type = "sine";
+
+    oscillator.frequency.setValueAtTime(
+      getToneFrequency(),
+      audioContext.currentTime,
+    );
+
+    const volume = getVolume() / 100;
+
+    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+
+    gainNode.gain.linearRampToValueAtTime(
+      volume,
+      audioContext.currentTime + 0.005,
+    );
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.start();
+
+    audioActive = true;
+  }
+
+  function toneStop() {
+    if (!audioActive || !oscillator || !gainNode || !audioContext) {
+      return;
+    }
+
+    const oldOscillator = oscillator;
+    const oldGainNode = gainNode;
+
+    oscillator = null;
+    gainNode = null;
+    audioActive = false;
+
+    const now = audioContext.currentTime;
+
+    oldGainNode.gain.cancelScheduledValues(now);
+
+    oldGainNode.gain.setValueAtTime(oldGainNode.gain.value, now);
+
+    oldGainNode.gain.linearRampToValueAtTime(0, now + 0.005);
+
+    window.setTimeout(() => {
+      try {
+        oldOscillator.stop();
+      } catch {
+        /* already stopped */
+      }
+
+      try {
+        oldOscillator.disconnect();
+      } catch {
+        /* already disconnected */
+      }
+
+      try {
+        oldGainNode.disconnect();
+      } catch {
+        /* already disconnected */
+      }
+    }, 20);
+  }
+
+  /* =========================================================
+     MORSE INPUT
+     ========================================================= */
+
+  function addMorseElement(element) {
+    if (element !== "." && element !== "-") {
+      return;
+    }
+
+    morseInput += element;
+  }
+
+  function finishMorseCharacter() {
+    if (!morseInput) {
+      return;
+    }
+
+    const character = MORSE_REVERSE[morseInput] || "?";
+
+    addTypedCharacter(character);
+
+    morseInput = "";
+  }
+
+  function finishKeyStroke() {
+    if (!keyDownStarted) {
+      return;
+    }
+
+    const duration = performance.now() - keyDownStarted;
+
+    keyDownStarted = 0;
+    keyDown = false;
+
+    toneStop();
+
+    const dit = getDitMilliseconds();
+
+    const element = duration >= dit * 2 ? "-" : ".";
+
+    addMorseElement(element);
+  }
+
+  function scheduleCharacterFinish() {
+    if (characterTimer !== null) {
+      clearTimeout(characterTimer);
+    }
+
+    characterTimer = window.setTimeout(() => {
+      characterTimer = null;
+
+      finishMorseCharacter();
+    }, getDitMilliseconds() * 3);
+  }
+
+  async function handleSpaceDown(event) {
+    if (event.code !== "Space") {
+      return;
+    }
+
+    event.preventDefault();
+
+    /*
+     * Browser-Key-Repeat ignorieren.
+     */
+    if (event.repeat || keyDown) {
+      return;
+    }
+
+    if (characterTimer !== null) {
+      clearTimeout(characterTimer);
+      characterTimer = null;
+    }
+
+    keyDown = true;
+    keyDownStarted = performance.now();
+
+    /*
+     * Genau EIN Ton pro gedrückter Space-Taste.
+     */
+    await toneStart();
+
+    /*
+     * Falls die Taste während des await bereits
+     * wieder losgelassen wurde, nichts weiter tun.
+     */
+    if (!keyDown) {
+      toneStop();
+    }
+  }
+
+  function handleSpaceUp(event) {
+    if (event.code !== "Space") {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (!keyDown) {
+      return;
+    }
+
+    finishKeyStroke();
+
+    scheduleCharacterFinish();
+  }
+
+  function handleWindowBlur() {
+    if (keyDown) {
+      finishKeyStroke();
+    } else {
+      toneStop();
+    }
+  }
+
+  window.addEventListener("keydown", handleSpaceDown);
+  window.addEventListener("keyup", handleSpaceUp);
+  window.addEventListener("blur", handleWindowBlur);
+
+  /* =========================================================
      MORSE UNITS
      ========================================================= */
 
@@ -170,40 +443,27 @@
     return units;
   }
 
-  /*
-   * Morse-Dauer eines sichtbaren Trainingswertes.
-   *
-   * Zwischen mehreren Zeichen innerhalb einer
-   * Abkürzung liegt der normale Zeichenabstand.
-   *
-   * Danach folgt der Wortabstand.
-   */
-
   function textUnits(text) {
     const characters = Array.from(String(text));
 
-    if (characters.length === 0) {
+    if (!characters.length) {
       return 0;
     }
 
     let units = 0;
 
-    for (let i = 0; i < characters.length; i++) {
-      units += morseUnits(characters[i]);
+    characters.forEach((character, index) => {
+      units += morseUnits(character);
 
-      if (i < characters.length - 1) {
+      if (index < characters.length - 1) {
         units += CW_CHARACTER_GAP;
       }
-    }
+    });
 
     units += CW_WORD_GAP;
 
     return units;
   }
-
-  /* =========================================================
-     VVV
-     ========================================================= */
 
   function vvvUnits() {
     return (
@@ -216,11 +476,10 @@
     );
   }
 
-  /* =========================================================
-     KA
-     ========================================================= */
-
   function kaUnits() {
+    /*
+     * KA = -.-.- als zusammenhängendes Signal.
+     */
     const code = "-.-.-";
 
     let units = 0;
@@ -239,15 +498,11 @@
   }
 
   /* =========================================================
-     TIMING-SEQUENCE
+     TIMING
      ========================================================= */
 
   function buildTimingSequence(groups) {
     const sequence = [];
-
-    /*
-     * VVV
-     */
 
     sequence.push({
       text: "VVV",
@@ -255,22 +510,11 @@
       units: vvvUnits(),
     });
 
-    /*
-     * KA
-     */
-
     sequence.push({
       text: "KA",
       type: "ka",
       units: kaUnits(),
     });
-
-    /*
-     * Jede Trainingsabkürzung separat.
-     *
-     * Die 5er-Gruppierung beeinflusst
-     * NICHT die Morsezeit.
-     */
 
     groups.forEach((group, groupIndex) => {
       group.forEach((item, itemIndex) => {
@@ -279,14 +523,10 @@
           type: "training",
           groupIndex,
           itemIndex,
-          units: textUnits(item),
+          units: morseUnits(item) + CW_WORD_GAP,
         });
       });
     });
-
-    /*
-     * Abschluss +
-     */
 
     sequence.push({
       text: "+",
@@ -296,10 +536,6 @@
 
     return sequence;
   }
-
-  /* =========================================================
-     GESAMTZEIT
-     ========================================================= */
 
   function getTotalUnits() {
     return currentTiming.reduce((total, item) => total + item.units, 0);
@@ -360,7 +596,6 @@
     const header = parseCSVLine(lines[0]).map((value) => value.toLowerCase());
 
     const abbreviationIndex = header.indexOf("abbreviation");
-
     const meaningIndex = header.indexOf("meaning");
 
     if (abbreviationIndex === -1 || meaningIndex === -1) {
@@ -448,7 +683,9 @@
     if (!allMethods.length) {
       currentMethod = null;
       abbreviationData = [];
+
       populateLessons();
+
       return;
     }
 
@@ -542,10 +779,6 @@
       if (!file) {
         throw new Error("Custom CSV file is no longer available.");
       }
-
-      /*
-       * Vollständige CSV-Daten übernehmen.
-       */
 
       abbreviationData = file.data.slice();
 
@@ -642,7 +875,7 @@
   }
 
   /* =========================================================
-     TRAININGSGRUPPEN
+     TRAINING GROUPS
      ========================================================= */
 
   function createTrainingGroups() {
@@ -672,18 +905,215 @@
   }
 
   /* =========================================================
-     VISUELLE GRUPPE
+     SOLUTION
+     ========================================================= */
+
+  function resetSolutionData() {
+    typedGroups = [];
+
+    currentTypedGroup = 0;
+    currentTypedIndex = 0;
+
+    morseInput = "";
+
+    if (characterTimer !== null) {
+      clearTimeout(characterTimer);
+      characterTimer = null;
+    }
+
+    updateSolution();
+  }
+
+  function addTypedCharacter(character) {
+    /*
+     * Nichts mehr speichern, wenn die Aufgabe
+     * vollständig gemorst wurde.
+     */
+    if (currentTypedGroup >= expectedGroups.length) {
+      return;
+    }
+
+    const expectedGroup = expectedGroups[currentTypedGroup];
+
+    if (currentTypedIndex >= expectedGroup.length) {
+      return;
+    }
+
+    if (!typedGroups[currentTypedGroup]) {
+      typedGroups[currentTypedGroup] = [];
+    }
+
+    /*
+     * Genau ein tatsächlich gemorstes Zeichen.
+     */
+    typedGroups[currentTypedGroup].push(String(character));
+
+    currentTypedIndex++;
+
+    if (currentTypedIndex >= expectedGroup.length) {
+      currentTypedGroup++;
+      currentTypedIndex = 0;
+    }
+
+    updateSolution();
+  }
+
+  function createSolutionGroup(typedGroup, expectedGroup) {
+    const groupElement = document.createElement("span");
+
+    groupElement.className = "cwtype-solution-group";
+
+    typedGroup.forEach((typedCharacter, index) => {
+      const expectedCharacter = expectedGroup[index];
+
+      const characterElement = document.createElement("span");
+
+      characterElement.className = "cwtype-solution-character";
+
+      characterElement.textContent = typedCharacter;
+
+      if (
+        String(typedCharacter).toUpperCase() ===
+        String(expectedCharacter).toUpperCase()
+      ) {
+        characterElement.classList.add("correct");
+      } else {
+        characterElement.classList.add("wrong");
+
+        characterElement.title = "Expected: " + expectedCharacter;
+      }
+
+      groupElement.appendChild(characterElement);
+
+      /*
+       * Abstand nur innerhalb der Gruppe.
+       */
+      if (index < typedGroup.length - 1) {
+        const characterGap = document.createElement("span");
+
+        characterGap.className = "cwtype-solution-character-gap";
+
+        characterGap.textContent = " ";
+
+        groupElement.appendChild(characterGap);
+      }
+    });
+
+    return groupElement;
+  }
+
+  function createSolutionGap() {
+    const gap = document.createElement("span");
+
+    gap.className = "cwtype-solution-group-gap";
+
+    /*
+     * EIN echter Gruppenabstand.
+     */
+    gap.textContent = "   ";
+
+    return gap;
+  }
+
+  function updateSolution() {
+    if (!solutionElement) {
+      return;
+    }
+
+    solutionElement.replaceChildren();
+
+    /*
+     * Solution wird erst bei Show solution sichtbar.
+     */
+    if (showSolutionButton?.dataset.active !== "true") {
+      solutionElement.hidden = true;
+      return;
+    }
+
+    solutionElement.hidden = false;
+
+    /*
+     * Nur Gruppen anzeigen, in denen wirklich
+     * mindestens ein Zeichen gemorst wurde.
+     */
+    const visibleGroups = typedGroups
+      .map((group, index) => ({
+        group,
+        index,
+      }))
+      .filter(({ group }) => Array.isArray(group) && group.length > 0);
+
+    visibleGroups.forEach(({ group, index }, visibleIndex) => {
+      /*
+       * WICHTIG:
+       *
+       * Vor der ersten Trainingsgruppe kommt
+       * der Abstand nach VVV / KA.
+       *
+       * Dadurch wird aus:
+       *
+       * VVV   KA EEEEE
+       *
+       * wieder:
+       *
+       * VVV   KA   EEEEE
+       */
+      if (visibleIndex === 0) {
+        solutionElement.appendChild(createSolutionGap());
+      }
+
+      const expectedGroup = expectedGroups[index];
+
+      if (!expectedGroup) {
+        return;
+      }
+
+      const groupElement = createSolutionGroup(group, expectedGroup);
+
+      solutionElement.appendChild(groupElement);
+
+      /*
+       * Abstand zwischen den logischen
+       * Trainingsgruppen.
+       *
+       * Nicht zwischen einzelnen Zeichen.
+       */
+      if (visibleIndex < visibleGroups.length - 1) {
+        solutionElement.appendChild(createSolutionGap());
+      }
+    });
+  }
+
+  function toggleSolution() {
+    if (!solutionElement) {
+      return;
+    }
+
+    const active = showSolutionButton?.dataset.active === "true";
+
+    if (active) {
+      showSolutionButton.dataset.active = "false";
+
+      solutionElement.hidden = true;
+
+      return;
+    }
+
+    showSolutionButton.dataset.active = "true";
+
+    solutionElement.hidden = false;
+
+    updateSolution();
+  }
+
+  /* =========================================================
+     VISUAL GROUP
      ========================================================= */
 
   function createGroupElement(group) {
     const groupElement = document.createElement("span");
 
     groupElement.className = "cwtype-group";
-
-    /*
-     * Die Gruppe bleibt ein eigenes
-     * geschlossenes Element.
-     */
 
     groupElement.style.display = "inline-flex";
 
@@ -692,10 +1122,6 @@
     groupElement.style.verticalAlign = "middle";
 
     groupElement.style.whiteSpace = "nowrap";
-
-    /*
-     * Abstand innerhalb der 5er-Gruppe.
-     */
 
     groupElement.style.gap = "0.32em";
 
@@ -708,10 +1134,6 @@
 
       character.style.display = "inline-block";
 
-      /*
-       * Keine eigene vertikale Verschiebung.
-       */
-
       character.style.lineHeight = "1";
 
       groupElement.appendChild(character);
@@ -721,7 +1143,7 @@
   }
 
   /* =========================================================
-     TRACK AUFBAUEN
+     TRACK
      ========================================================= */
 
   function createTrack() {
@@ -729,41 +1151,23 @@
 
     currentGroups = createTrainingGroups();
 
+    expectedGroups = currentGroups.map((group) =>
+      group.map((item) => String(item)),
+    );
+
+    resetSolutionData();
+
     currentTiming = buildTimingSequence(currentGroups);
 
     const line = document.createElement("div");
 
     line.className = "cwtype-line";
 
-    /*
-     * HORIZONTALE POSITION
-     *
-     * left wird später durch die Animation
-     * gesetzt.
-     */
-
     line.style.position = "absolute";
-
-    /*
-     * VERTIKALE ZENTRIERUNG
-     *
-     * Exakt Mitte des Laufbands.
-     *
-     * Wichtig:
-     * Nicht mit margin-top,
-     * padding oder festen Pixelwerten
-     * korrigieren.
-     */
 
     line.style.top = "50%";
 
     line.style.transform = "translateY(-50%)";
-
-    /*
-     * Flex sorgt dafür, dass VVV,
-     * KA, Gruppen und + auf derselben
-     * vertikalen Achse liegen.
-     */
 
     line.style.display = "flex";
 
@@ -772,14 +1176,10 @@
     line.style.whiteSpace = "nowrap";
 
     line.style.height = "auto";
-
     line.style.margin = "0";
-
     line.style.padding = "0";
 
-    /* ---------------------------------------------------------
-       VVV
-       --------------------------------------------------------- */
+    /* VVV */
 
     const vvv = document.createElement("span");
 
@@ -791,9 +1191,7 @@
 
     line.appendChild(vvv);
 
-    /* ---------------------------------------------------------
-       VVV → KA
-       --------------------------------------------------------- */
+    /* VVV GAP */
 
     const vvvGap = document.createElement("span");
 
@@ -807,9 +1205,7 @@
 
     line.appendChild(vvvGap);
 
-    /* ---------------------------------------------------------
-       KA
-       --------------------------------------------------------- */
+    /* KA */
 
     const ka = document.createElement("span");
 
@@ -821,9 +1217,7 @@
 
     line.appendChild(ka);
 
-    /* ---------------------------------------------------------
-       KA → erste Gruppe
-       --------------------------------------------------------- */
+    /* KA GAP */
 
     const kaGap = document.createElement("span");
 
@@ -837,34 +1231,17 @@
 
     line.appendChild(kaGap);
 
-    /* ---------------------------------------------------------
-       5ER-GRUPPEN
-       --------------------------------------------------------- */
+    /* TRAINING GROUPS */
 
     currentGroups.forEach((group, groupIndex) => {
-      /*
-       * Jede Gruppe ist ein eigenes
-       * Element.
-       *
-       * Dadurch können die Gruppen
-       * niemals zu einer langen
-       * Zeichenkette verschmelzen.
-       */
-
       const groupElement = createGroupElement(group);
 
       line.appendChild(groupElement);
 
       /*
-       * Abstand zwischen den Gruppen.
-       *
-       * ABSICHTLICH KURZ.
-       *
-       * Dieser Wert ist ausschließlich
-       * optisch und hat keinerlei
-       * Einfluss auf Morse-Timing.
+       * Abstand zwischen den 5er-Gruppen
+       * im Laufband.
        */
-
       if (groupIndex < currentGroups.length - 1) {
         const groupGap = document.createElement("span");
 
@@ -880,9 +1257,7 @@
       }
     });
 
-    /* ---------------------------------------------------------
-       letzte Gruppe → +
-       --------------------------------------------------------- */
+    /* PLUS GAP */
 
     const plusGap = document.createElement("span");
 
@@ -896,9 +1271,7 @@
 
     line.appendChild(plusGap);
 
-    /* ---------------------------------------------------------
-       +
-       --------------------------------------------------------- */
+    /* PLUS */
 
     const plus = document.createElement("span");
 
@@ -912,11 +1285,17 @@
 
     track.appendChild(line);
 
+    if (showSolutionButton) {
+      showSolutionButton.disabled = expectedGroups.length === 0;
+
+      showSolutionButton.dataset.active = "false";
+    }
+
     return line;
   }
 
   /* =========================================================
-     POSITIONIERUNG
+     POSITION
      ========================================================= */
 
   let startX = 0;
@@ -929,17 +1308,9 @@
 
     const markerX = markerRect.left - band.left + markerRect.width / 2;
 
-    /*
-     * Nur die tatsächliche Breite
-     * des fertigen visuellen Inhalts.
-     *
-     * Niemals für Timing verwenden.
-     */
-
     const width = line.getBoundingClientRect().width;
 
     startX = markerX;
-
     endX = markerX - width;
   }
 
@@ -989,21 +1360,15 @@
 
     const progress = Math.min(1, elapsed / duration);
 
-    /*
-     * Die komplette Bewegung ist linear.
-     *
-     * WPM bestimmt die Zeit.
-     * Die Breite bestimmt ausschließlich
-     * den räumlichen Weg.
-     */
-
     const x = startX + (endX - startX) * progress;
 
     setX(x);
 
     if (progress >= 1) {
       setX(endX);
+
       finish();
+
       return;
     }
 
@@ -1021,16 +1386,14 @@
     paused = false;
     elapsed = 0;
 
+    finishMorseCharacter();
+
     track.style.visibility = "hidden";
 
     try {
       const line = createTrack();
 
       requestAnimationFrame(() => {
-        /*
-         * Erst nach dem Layout messen.
-         */
-
         layout(line);
 
         setX(startX);
@@ -1064,8 +1427,13 @@
      START
      ========================================================= */
 
-  function start() {
+  async function start() {
     stopAnimation();
+
+    /*
+     * AudioContext durch Benutzeraktion aktivieren.
+     */
+    await ensureAudio();
 
     track.style.visibility = "hidden";
 
@@ -1150,6 +1518,14 @@
     paused = false;
     elapsed = 0;
 
+    if (keyDown) {
+      finishKeyStroke();
+    }
+
+    finishMorseCharacter();
+
+    toneStop();
+
     setX(startX);
 
     if (startButton) {
@@ -1178,6 +1554,10 @@
     paused = false;
 
     setX(endX);
+
+    finishMorseCharacter();
+
+    toneStop();
 
     if (startButton) {
       startButton.disabled = false;
@@ -1234,7 +1614,7 @@
   }
 
   /* =========================================================
-     LESSON SELECTION
+     LESSON
      ========================================================= */
 
   function selectLesson() {
@@ -1292,11 +1672,25 @@
     }
   });
 
+  toneInput?.addEventListener("input", () => {
+    /*
+     * Neue Frequenz gilt beim nächsten Ton.
+     */
+  });
+
+  volumeInput?.addEventListener("input", () => {
+    if (audioActive && gainNode && audioContext) {
+      gainNode.gain.setValueAtTime(getVolume() / 100, audioContext.currentTime);
+    }
+  });
+
   startButton?.addEventListener("click", start);
 
   pauseButton?.addEventListener("click", togglePause);
 
   stopButton?.addEventListener("click", stop);
+
+  showSolutionButton?.addEventListener("click", toggleSolution);
 
   window.addEventListener("resize", () => {
     if (!running) {
@@ -1347,6 +1741,10 @@
 
       if (stopButton) {
         stopButton.disabled = true;
+      }
+
+      if (showSolutionButton) {
+        showSolutionButton.disabled = true;
       }
     }
   }
