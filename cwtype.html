@@ -5,7 +5,7 @@
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <title>CW Send</title>
+    <title>CW Type</title>
 
     <link rel="stylesheet" href="assets/css/styles.css" />
   </head>
@@ -13,12 +13,12 @@
   <body>
     <main class="container">
       <header>
-        <h1>CW Trainer - Send</h1>
+        <h1>CW Trainer - Type</h1>
       </header>
 
       <section class="training">
         <!-- ==================================================
-             MODE SWITCH
+             MODE
              ================================================== -->
 
         <div class="control-group">
@@ -28,81 +28,131 @@
             <span class="mode-label">Listen</span>
 
             <label class="mode-toggle">
-              <input id="mode-switch" type="checkbox" />
-
+              <input id="mode-switch" type="checkbox" checked />
               <span class="mode-slider"></span>
             </label>
 
-            <span class="mode-label">Send</span>
+            <span class="mode-label">Type</span>
           </div>
         </div>
 
-        <!-- CSV UPLOAD -->
+        <!-- ==================================================
+             TYPE MODE
+             ================================================== -->
 
-        <section class="custom-csv">
-          <div class="custom-csv-action">
-            <label class="file-button" for="custom-file">
-              Upload your CSV file
-            </label>
+        <section id="type-mode">
+          <!-- ==================================================
+               CSV UPLOAD
+               ================================================== -->
 
-            <input id="custom-file" type="file" accept=".csv,text/csv" hidden />
-          </div>
+          <section class="custom-csv">
+            <div class="custom-csv-action">
+              <label class="file-button" for="custom-file">
+                Upload your CSV file
+              </label>
 
-          <div id="custom-files" class="custom-files" aria-live="polite"></div>
-        </section>
+              <input
+                id="custom-file"
+                type="file"
+                accept=".csv,text/csv"
+                hidden
+              />
+            </div>
 
-        <!-- METHOD -->
+            <div
+              id="custom-files"
+              class="custom-files"
+              aria-live="polite"
+            ></div>
+          </section>
 
-        <div class="control-group">
-          <label for="method">Method</label>
-
-          <select id="method">
-            <option value="">Select method</option>
-          </select>
-        </div>
-
-        <!-- LESSON -->
-
-        <div class="control-group">
-          <label for="lesson">Lesson</label>
-
-          <select id="lesson">
-            <option value="">Select lesson</option>
-          </select>
-        </div>
-
-        <!-- SETTINGS -->
-
-        <div class="settings">
-          <div class="control-group">
-            <label for="groups">Groups</label>
-
-            <input id="groups" type="number" min="1" max="1000" value="50" />
-          </div>
+          <!-- ==================================================
+               METHOD
+               ================================================== -->
 
           <div class="control-group">
-            <label for="groupSize"> Characters per group </label>
+            <label for="method">Method</label>
 
-            <input id="groupSize" type="number" min="1" max="20" value="5" />
+            <select id="method">
+              <option value="">Loading...</option>
+            </select>
           </div>
+
+          <!-- ==================================================
+               LESSON
+               ================================================== -->
 
           <div class="control-group">
-            <label for="wpm"> Speed (WPM) </label>
+            <label for="lesson">Lesson</label>
 
-            <input id="wpm" type="number" min="1" max="60" value="12" />
-          </div>
-        </div>
-
-        <!-- CW TYPE TRAINING -->
-
-        <section class="cwtype">
-          <div id="cwtype-laufband">
-            <div id="cwtype-marker"></div>
-
-            <div id="cwtype-track"></div>
+            <select id="lesson">
+              <option value="">Loading...</option>
+            </select>
           </div>
 
-          <!-- BUTTONS -->
+          <!-- ==================================================
+               SETTINGS
+               ================================================== -->
+
+          <div class="settings">
+            <!-- GROUPS -->
+
+            <div class="control-group">
+              <label for="groups">Groups</label>
+
+              <input id="groups" type="number" min="1" max="1000" value="50" />
+            </div>
+
+            <!-- CHARACTERS PER GROUP -->
+
+            <div class="control-group">
+              <label for="groupSize">Characters per group</label>
+
+              <input id="groupSize" type="number" min="1" max="20" value="5" />
+            </div>
+
+            <!-- SPEED -->
+
+            <div class="control-group">
+              <label for="wpm">Speed (WPM)</label>
+
+              <input id="wpm" type="number" min="1" max="60" value="12" />
+            </div>
+
+            <!-- TONE -->
+
+            <div class="control-group">
+              <label for="tone">Tone (Hz)</label>
+
+              <input id="tone" type="number" min="100" max="2000" value="600" />
+            </div>
+
+            <!-- VOLUME -->
+
+            <div class="control-group">
+              <label for="volume">Volume</label>
+
+              <input id="volume" type="range" min="0" max="100" value="30" />
+            </div>
+          </div>
+
+          <!-- ==================================================
+               CW TYPE TRACK
+               ================================================== -->
+
+          <section class="cwtype-laufband" id="cwtype-laufband">
+            <div
+              id="cwtype-marker"
+              class="cwtype-marker"
+              aria-hidden="true"
+            ></div>
+
+            <div id="cwtype-track" class="cwtype-track"></div>
+          </section>
+
+          <!-- ==================================================
+               TRAINER BUTTONS
+               ================================================== -->
 
           <div class="buttons">
             <button id="cwtype-start" type="button">▶ Start</button>
@@ -111,15 +161,37 @@
 
             <button id="cwtype-stop" type="button" disabled>■ Stop</button>
           </div>
+
+          <!-- ==================================================
+               SOLUTION
+               ================================================== -->
+
+          <section class="solution-section">
+            <button id="show-solution" type="button" disabled>
+              Show solution
+            </button>
+
+            <pre id="solution" class="solution" hidden></pre>
+          </section>
         </section>
       </section>
     </main>
 
-    <!-- CW TYPE -->
+    <!-- ======================================================
+         AUDIO
+         ====================================================== -->
+
+    <script src="assets/js/incwaudio.js"></script>
+
+    <!-- ======================================================
+         CW TYPE
+         ====================================================== -->
 
     <script src="assets/js/cwtype.js"></script>
 
-    <!-- MODE SWITCH -->
+    <!-- ======================================================
+         MODE SWITCH
+         ====================================================== -->
 
     <script src="assets/js/cwmode.js"></script>
   </body>

@@ -18,22 +18,21 @@
 
       <section class="training">
         <!-- ==================================================
-             MODE SWITCH
+             MODE
              ================================================== -->
 
         <div class="control-group">
           <label>Mode</label>
 
           <div class="mode-switch">
-            <span class="mode-label"> Listen </span>
+            <span class="mode-label">Listen</span>
 
             <label class="mode-toggle">
               <input id="mode-switch" type="checkbox" />
-
               <span class="mode-slider"></span>
             </label>
 
-            <span class="mode-label"> Send </span>
+            <span class="mode-label">Send</span>
           </div>
         </div>
 
@@ -42,26 +41,6 @@
              ================================================== -->
 
         <section id="listen-mode">
-          <!-- METHOD -->
-
-          <div class="control-group">
-            <label for="method"> Method </label>
-
-            <select id="method">
-              <option value="">Loading...</option>
-            </select>
-          </div>
-
-          <!-- LESSON -->
-
-          <div class="control-group">
-            <label for="lesson"> Lesson </label>
-
-            <select id="lesson">
-              <option value="">Loading...</option>
-            </select>
-          </div>
-
           <!-- ==================================================
                CSV UPLOAD
                ================================================== -->
@@ -88,10 +67,28 @@
           </section>
 
           <!-- ==================================================
-               CHARACTERS
+               METHOD
                ================================================== -->
 
-          <div id="characters" class="characters"></div>
+          <div class="control-group">
+            <label for="method">Method</label>
+
+            <select id="method">
+              <option value="">Loading...</option>
+            </select>
+          </div>
+
+          <!-- ==================================================
+               LESSON
+               ================================================== -->
+
+          <div class="control-group">
+            <label for="lesson">Lesson</label>
+
+            <select id="lesson">
+              <option value="">Loading...</option>
+            </select>
+          </div>
 
           <!-- ==================================================
                SETTINGS
@@ -101,7 +98,7 @@
             <!-- GROUPS -->
 
             <div class="control-group">
-              <label for="groups"> Groups </label>
+              <label for="groups">Groups</label>
 
               <input id="groups" type="number" min="1" max="1000" value="50" />
             </div>
@@ -109,7 +106,7 @@
             <!-- CHARACTERS PER GROUP -->
 
             <div class="control-group">
-              <label for="groupSize"> Characters per group </label>
+              <label for="groupSize">Characters per group</label>
 
               <input id="groupSize" type="number" min="1" max="20" value="5" />
             </div>
@@ -117,7 +114,7 @@
             <!-- SPEED -->
 
             <div class="control-group">
-              <label for="wpm"> Speed (WPM) </label>
+              <label for="wpm">Speed (WPM)</label>
 
               <input id="wpm" type="number" min="1" max="60" value="12" />
             </div>
@@ -125,7 +122,7 @@
             <!-- TONE -->
 
             <div class="control-group">
-              <label for="tone"> Tone (Hz) </label>
+              <label for="tone">Tone (Hz)</label>
 
               <input id="tone" type="number" min="100" max="2000" value="600" />
             </div>
@@ -133,11 +130,25 @@
             <!-- VOLUME -->
 
             <div class="control-group">
-              <label for="volume"> Volume </label>
+              <label for="volume">Volume</label>
 
               <input id="volume" type="range" min="0" max="100" value="30" />
             </div>
           </div>
+
+          <!-- ==================================================
+               CHARACTERS
+               ================================================== -->
+
+          <div id="characters" class="characters"></div>
+
+          <!-- ==================================================
+               GREY TRAINING FIELD
+               ================================================== -->
+
+          <section class="trainer-field">
+            <div id="cwtype-track"></div>
+          </section>
 
           <!-- ==================================================
                TRAINER BUTTONS
@@ -181,10 +192,14 @@
     </main>
 
     <!-- ======================================================
-         LISTEN MODE SCRIPTS
+         AUDIO
          ====================================================== -->
 
     <script src="assets/js/incwaudio.js"></script>
+
+    <!-- ======================================================
+         CW TRAINER
+         ====================================================== -->
 
     <script src="assets/js/cwtrainer.js"></script>
 
