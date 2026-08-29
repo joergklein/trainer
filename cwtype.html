@@ -95,45 +95,51 @@
                ================================================== -->
 
           <div class="settings">
-            <!-- GROUPS -->
-
             <div class="control-group">
               <label for="groups">Groups</label>
-
               <input id="groups" type="number" min="1" max="1000" value="50" />
             </div>
 
-            <!-- CHARACTERS PER GROUP -->
-
             <div class="control-group">
               <label for="groupSize">Characters per group</label>
-
               <input id="groupSize" type="number" min="1" max="20" value="5" />
             </div>
 
-            <!-- SPEED -->
-
             <div class="control-group">
               <label for="wpm">Speed (WPM)</label>
-
               <input id="wpm" type="number" min="1" max="60" value="12" />
             </div>
 
-            <!-- TONE -->
-
             <div class="control-group">
               <label for="tone">Tone (Hz)</label>
-
               <input id="tone" type="number" min="100" max="2000" value="600" />
             </div>
 
-            <!-- VOLUME -->
-
             <div class="control-group">
               <label for="volume">Volume</label>
-
               <input id="volume" type="range" min="0" max="100" value="30" />
             </div>
+          </div>
+
+          <!-- ==================================================
+               KEYBOARD SHORTCUTS
+               ================================================== -->
+
+          <div class="cwtype-shortcuts" aria-label="Keyboard shortcuts">
+            <span>
+              <kbd>Space</kbd>
+              Start training / Morse key
+            </span>
+
+            <span>
+              <kbd>Ctrl</kbd> + <kbd>Space</kbd>
+              Pause / Resume
+            </span>
+
+            <span>
+              <kbd>Ctrl</kbd> + <kbd>X</kbd>
+              Stop → Show solution
+            </span>
           </div>
 
           <!-- ==================================================
@@ -149,18 +155,6 @@
 
             <div id="cwtype-track" class="cwtype-track"></div>
           </section>
-
-          <!-- ==================================================
-               TRAINER BUTTONS
-               ================================================== -->
-
-          <div class="buttons">
-            <button id="cwtype-start" type="button">▶ Start</button>
-
-            <button id="cwtype-pause" type="button" disabled>⏸ Pause</button>
-
-            <button id="cwtype-stop" type="button" disabled>■ Stop</button>
-          </div>
 
           <!-- ==================================================
                SOLUTION

@@ -41,19 +41,14 @@
   let abbreviationData = [];
 
   let currentGroups = [];
-  let expectedGroups = [];
   let currentTiming = [];
-
   let typedGroups = [];
+  let expectedGroups = [];
+
   let currentTypedGroup = 0;
   let currentTypedIndex = 0;
 
   let morseInput = "";
-
-  let keyDown = false;
-  let keyDownStarted = 0;
-
-  let characterTimer = null;
 
   /* =========================================================
      AUDIO
@@ -62,7 +57,294 @@
   let audioContext = null;
   let oscillator = null;
   let gainNode = null;
+  let audioReady = false;
   let audioActive = false;
+
+  async function ensureAudio() {
+    if (!audioContext) {
+      const AudioContextClass =
+        window.AudioContext || window.webkitAudioContext;
+
+      if (!AudioContextClass) {
+        console.error("Web Audio API is not available.");
+        return false;
+      }
+
+      audioContext = new AudioContextClass();
+
+      oscillator = audioContext.createOscillator();
+      gainNode = audioContext.createGain();
+
+      oscillator.type = "sine";
+
+      oscillator.frequency.setValueAtTime(
+        getToneFrequency(),
+        audioContext.currentTime,
+      );
+
+      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      oscillator.start();
+
+      audioReady = true;
+    }
+
+    if (audioContext.state === "suspended") {
+      try {
+        await audioContext.resume();
+      } catch (error) {
+        console.error("AudioContext resume failed:", error);
+        return false;
+      }
+    }
+
+    return audioContext.state === "running";
+  }
+
+  function getToneFrequency() {
+    const value = Number(toneInput?.value);
+
+    if (!Number.isFinite(value)) {
+      return 600;
+    }
+
+    return Math.max(100, Math.min(2000, value));
+  }
+
+  function getVolume() {
+    const value = Number(volumeInput?.value);
+
+    if (!Number.isFinite(value)) {
+      return 30;
+    }
+
+    return Math.max(0, Math.min(100, value));
+  }
+
+  async function toneStart() {
+    const ready = await ensureAudio();
+
+    if (!ready || !audioContext || !oscillator || !gainNode) {
+      return;
+    }
+
+    const now = audioContext.currentTime;
+    const frequency = getToneFrequency();
+    const volume = getVolume() / 100;
+
+    oscillator.frequency.cancelScheduledValues(now);
+    oscillator.frequency.setValueAtTime(frequency, now);
+
+    gainNode.gain.cancelScheduledValues(now);
+    gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+
+    gainNode.gain.linearRampToValueAtTime(volume, now + 0.008);
+
+    audioActive = true;
+  }
+
+  function toneStop() {
+    if (!audioContext || !gainNode || !audioReady) {
+      return;
+    }
+
+    const now = audioContext.currentTime;
+
+    gainNode.gain.cancelScheduledValues(now);
+
+    gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+
+    gainNode.gain.linearRampToValueAtTime(0, now + 0.008);
+
+    audioActive = false;
+  }
+
+  function updateTone() {
+    if (!audioContext || !oscillator) {
+      return;
+    }
+
+    oscillator.frequency.setValueAtTime(
+      getToneFrequency(),
+      audioContext.currentTime,
+    );
+  }
+
+  function updateVolume() {
+    if (!audioContext || !gainNode) {
+      return;
+    }
+
+    const now = audioContext.currentTime;
+
+    if (audioActive) {
+      gainNode.gain.setValueAtTime(getVolume() / 100, now);
+    }
+  }
+
+  /* =========================================================
+     MORSE INPUT
+     ========================================================= */
+
+  let keyDown = false;
+  let keyDownStarted = 0;
+  let characterTimer = null;
+
+  function addMorseElement(element) {
+    if (element !== "." && element !== "-") {
+      return;
+    }
+
+    morseInput += element;
+  }
+
+  function finishMorseCharacter() {
+    if (!morseInput) {
+      return;
+    }
+
+    const character = MORSE_REVERSE[morseInput] || "?";
+
+    addTypedCharacter(character);
+
+    morseInput = "";
+  }
+
+  function finishKeyStroke() {
+    if (!keyDownStarted) {
+      return;
+    }
+
+    const durationMs = performance.now() - keyDownStarted;
+
+    keyDownStarted = 0;
+    keyDown = false;
+
+    toneStop();
+
+    const dit = getDitMilliseconds();
+
+    const element = durationMs >= dit * 2 ? "-" : ".";
+
+    addMorseElement(element);
+  }
+
+  function scheduleCharacterFinish() {
+    if (characterTimer !== null) {
+      clearTimeout(characterTimer);
+    }
+
+    characterTimer = window.setTimeout(() => {
+      characterTimer = null;
+      finishMorseCharacter();
+    }, getDitMilliseconds() * 3);
+  }
+
+  /* =========================================================
+     KEYBOARD
+     ========================================================= */
+
+  async function handleSpaceDown(event) {
+    if (event.code !== "Space") {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (event.repeat) {
+      return;
+    }
+
+    /* Ctrl + Space = Pause / Resume */
+
+    if (event.ctrlKey) {
+      if (keyDown) {
+        finishKeyStroke();
+      }
+
+      togglePause();
+      return;
+    }
+
+    /* Space = Start / Morse key */
+
+    if (!running) {
+      await start();
+    }
+
+    if (!running || paused) {
+      return;
+    }
+
+    if (keyDown) {
+      return;
+    }
+
+    if (characterTimer !== null) {
+      clearTimeout(characterTimer);
+      characterTimer = null;
+    }
+
+    keyDown = true;
+    keyDownStarted = performance.now();
+
+    await toneStart();
+  }
+
+  function handleSpaceUp(event) {
+    if (event.code !== "Space") {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (event.ctrlKey) {
+      return;
+    }
+
+    if (!keyDown) {
+      return;
+    }
+
+    finishKeyStroke();
+    scheduleCharacterFinish();
+  }
+
+  /* Ctrl + X = Stop + Show solution */
+
+  function handleControlX(event) {
+    if (!event.ctrlKey || event.key.toLowerCase() !== "x") {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (keyDown) {
+      finishKeyStroke();
+    }
+
+    stop();
+    showSolution();
+  }
+
+  function handleWindowBlur() {
+    if (keyDown) {
+      finishKeyStroke();
+    } else {
+      toneStop();
+    }
+  }
+
+  window.addEventListener("keydown", handleSpaceDown);
+
+  window.addEventListener("keyup", handleSpaceUp);
+
+  window.addEventListener("keydown", handleControlX);
+
+  window.addEventListener("blur", handleWindowBlur);
 
   /* =========================================================
      MORSE
@@ -140,10 +422,6 @@
   const CW_CHARACTER_GAP = 3;
   const CW_WORD_GAP = 7;
 
-  /* =========================================================
-     WPM
-     ========================================================= */
-
   function getWpm() {
     const value = Number(wpmInput?.value);
 
@@ -159,272 +437,11 @@
   }
 
   /* =========================================================
-     AUDIO
-     ========================================================= */
-
-  async function ensureAudio() {
-    if (!audioContext) {
-      const AudioContextClass =
-        window.AudioContext || window.webkitAudioContext;
-
-      if (!AudioContextClass) {
-        console.error("Web Audio API is not available.");
-        return false;
-      }
-
-      audioContext = new AudioContextClass();
-    }
-
-    if (audioContext.state === "suspended") {
-      try {
-        await audioContext.resume();
-      } catch (error) {
-        console.error("AudioContext resume failed:", error);
-        return false;
-      }
-    }
-
-    return audioContext.state === "running";
-  }
-
-  function getToneFrequency() {
-    const value = Number(toneInput?.value);
-
-    if (!Number.isFinite(value)) {
-      return 600;
-    }
-
-    return Math.max(100, Math.min(2000, value));
-  }
-
-  function getVolume() {
-    const value = Number(volumeInput?.value);
-
-    if (!Number.isFinite(value)) {
-      return 30;
-    }
-
-    return Math.max(0, Math.min(100, value));
-  }
-
-  async function toneStart() {
-    /*
-     * NIEMALS einen zweiten Oszillator starten,
-     * solange bereits ein Ton läuft.
-     */
-    if (audioActive) {
-      return;
-    }
-
-    const ready = await ensureAudio();
-
-    if (!ready) {
-      return;
-    }
-
-    /*
-     * Noch einmal prüfen:
-     * Während await ensureAudio() darf kein zweiter
-     * Start durch ein weiteres Event entstehen.
-     */
-    if (audioActive) {
-      return;
-    }
-
-    oscillator = audioContext.createOscillator();
-    gainNode = audioContext.createGain();
-
-    oscillator.type = "sine";
-
-    oscillator.frequency.setValueAtTime(
-      getToneFrequency(),
-      audioContext.currentTime,
-    );
-
-    const volume = getVolume() / 100;
-
-    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-
-    gainNode.gain.linearRampToValueAtTime(
-      volume,
-      audioContext.currentTime + 0.005,
-    );
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-
-    oscillator.start();
-
-    audioActive = true;
-  }
-
-  function toneStop() {
-    if (!audioActive || !oscillator || !gainNode || !audioContext) {
-      return;
-    }
-
-    const oldOscillator = oscillator;
-    const oldGainNode = gainNode;
-
-    oscillator = null;
-    gainNode = null;
-    audioActive = false;
-
-    const now = audioContext.currentTime;
-
-    oldGainNode.gain.cancelScheduledValues(now);
-
-    oldGainNode.gain.setValueAtTime(oldGainNode.gain.value, now);
-
-    oldGainNode.gain.linearRampToValueAtTime(0, now + 0.005);
-
-    window.setTimeout(() => {
-      try {
-        oldOscillator.stop();
-      } catch {
-        /* already stopped */
-      }
-
-      try {
-        oldOscillator.disconnect();
-      } catch {
-        /* already disconnected */
-      }
-
-      try {
-        oldGainNode.disconnect();
-      } catch {
-        /* already disconnected */
-      }
-    }, 20);
-  }
-
-  /* =========================================================
-     MORSE INPUT
-     ========================================================= */
-
-  function addMorseElement(element) {
-    if (element !== "." && element !== "-") {
-      return;
-    }
-
-    morseInput += element;
-  }
-
-  function finishMorseCharacter() {
-    if (!morseInput) {
-      return;
-    }
-
-    const character = MORSE_REVERSE[morseInput] || "?";
-
-    addTypedCharacter(character);
-
-    morseInput = "";
-  }
-
-  function finishKeyStroke() {
-    if (!keyDownStarted) {
-      return;
-    }
-
-    const duration = performance.now() - keyDownStarted;
-
-    keyDownStarted = 0;
-    keyDown = false;
-
-    toneStop();
-
-    const dit = getDitMilliseconds();
-
-    const element = duration >= dit * 2 ? "-" : ".";
-
-    addMorseElement(element);
-  }
-
-  function scheduleCharacterFinish() {
-    if (characterTimer !== null) {
-      clearTimeout(characterTimer);
-    }
-
-    characterTimer = window.setTimeout(() => {
-      characterTimer = null;
-
-      finishMorseCharacter();
-    }, getDitMilliseconds() * 3);
-  }
-
-  async function handleSpaceDown(event) {
-    if (event.code !== "Space") {
-      return;
-    }
-
-    event.preventDefault();
-
-    /*
-     * Browser-Key-Repeat ignorieren.
-     */
-    if (event.repeat || keyDown) {
-      return;
-    }
-
-    if (characterTimer !== null) {
-      clearTimeout(characterTimer);
-      characterTimer = null;
-    }
-
-    keyDown = true;
-    keyDownStarted = performance.now();
-
-    /*
-     * Genau EIN Ton pro gedrückter Space-Taste.
-     */
-    await toneStart();
-
-    /*
-     * Falls die Taste während des await bereits
-     * wieder losgelassen wurde, nichts weiter tun.
-     */
-    if (!keyDown) {
-      toneStop();
-    }
-  }
-
-  function handleSpaceUp(event) {
-    if (event.code !== "Space") {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (!keyDown) {
-      return;
-    }
-
-    finishKeyStroke();
-
-    scheduleCharacterFinish();
-  }
-
-  function handleWindowBlur() {
-    if (keyDown) {
-      finishKeyStroke();
-    } else {
-      toneStop();
-    }
-  }
-
-  window.addEventListener("keydown", handleSpaceDown);
-  window.addEventListener("keyup", handleSpaceUp);
-  window.addEventListener("blur", handleWindowBlur);
-
-  /* =========================================================
      MORSE UNITS
      ========================================================= */
 
   function morseUnits(character) {
-    const key = String(character).toUpperCase();
-    const code = MORSE[key];
+    const code = MORSE[String(character).toUpperCase()];
 
     if (!code) {
       return 0;
@@ -460,9 +477,7 @@
       }
     });
 
-    units += CW_WORD_GAP;
-
-    return units;
+    return units + CW_WORD_GAP;
   }
 
   function vvvUnits() {
@@ -477,9 +492,6 @@
   }
 
   function kaUnits() {
-    /*
-     * KA = -.-.- als zusammenhängendes Signal.
-     */
     const code = "-.-.-";
 
     let units = 0;
@@ -492,9 +504,7 @@
       }
     }
 
-    units += CW_WORD_GAP;
-
-    return units;
+    return units + CW_WORD_GAP;
   }
 
   /* =========================================================
@@ -502,19 +512,18 @@
      ========================================================= */
 
   function buildTimingSequence(groups) {
-    const sequence = [];
-
-    sequence.push({
-      text: "VVV",
-      type: "vvv",
-      units: vvvUnits(),
-    });
-
-    sequence.push({
-      text: "KA",
-      type: "ka",
-      units: kaUnits(),
-    });
+    const sequence = [
+      {
+        text: "VVV",
+        type: "vvv",
+        units: vvvUnits(),
+      },
+      {
+        text: "KA",
+        type: "ka",
+        units: kaUnits(),
+      },
+    ];
 
     groups.forEach((group, groupIndex) => {
       group.forEach((item, itemIndex) => {
@@ -523,7 +532,7 @@
           type: "training",
           groupIndex,
           itemIndex,
-          units: morseUnits(item) + CW_WORD_GAP,
+          units: textUnits(item),
         });
       });
     });
@@ -596,6 +605,7 @@
     const header = parseCSVLine(lines[0]).map((value) => value.toLowerCase());
 
     const abbreviationIndex = header.indexOf("abbreviation");
+
     const meaningIndex = header.indexOf("meaning");
 
     if (abbreviationIndex === -1 || meaningIndex === -1) {
@@ -683,9 +693,7 @@
     if (!allMethods.length) {
       currentMethod = null;
       abbreviationData = [];
-
       populateLessons();
-
       return;
     }
 
@@ -744,7 +752,6 @@
     });
 
     renderCustomFiles();
-
     rebuildMethods(id);
   }
 
@@ -910,25 +917,28 @@
 
   function resetSolutionData() {
     typedGroups = [];
-
     currentTypedGroup = 0;
     currentTypedIndex = 0;
-
     morseInput = "";
 
     if (characterTimer !== null) {
       clearTimeout(characterTimer);
+
       characterTimer = null;
+    }
+
+    if (showSolutionButton) {
+      showSolutionButton.dataset.active = "false";
+    }
+
+    if (solutionElement) {
+      solutionElement.hidden = true;
     }
 
     updateSolution();
   }
 
   function addTypedCharacter(character) {
-    /*
-     * Nichts mehr speichern, wenn die Aufgabe
-     * vollständig gemorst wurde.
-     */
     if (currentTypedGroup >= expectedGroups.length) {
       return;
     }
@@ -943,10 +953,7 @@
       typedGroups[currentTypedGroup] = [];
     }
 
-    /*
-     * Genau ein tatsächlich gemorstes Zeichen.
-     */
-    typedGroups[currentTypedGroup].push(String(character));
+    typedGroups[currentTypedGroup].push(character);
 
     currentTypedIndex++;
 
@@ -985,34 +992,18 @@
 
       groupElement.appendChild(characterElement);
 
-      /*
-       * Abstand nur innerhalb der Gruppe.
-       */
       if (index < typedGroup.length - 1) {
-        const characterGap = document.createElement("span");
+        const gap = document.createElement("span");
 
-        characterGap.className = "cwtype-solution-character-gap";
+        gap.className = "cwtype-solution-character-gap";
 
-        characterGap.textContent = " ";
+        gap.textContent = " ";
 
-        groupElement.appendChild(characterGap);
+        groupElement.appendChild(gap);
       }
     });
 
     return groupElement;
-  }
-
-  function createSolutionGap() {
-    const gap = document.createElement("span");
-
-    gap.className = "cwtype-solution-group-gap";
-
-    /*
-     * EIN echter Gruppenabstand.
-     */
-    gap.textContent = "   ";
-
-    return gap;
   }
 
   function updateSolution() {
@@ -1022,9 +1013,6 @@
 
     solutionElement.replaceChildren();
 
-    /*
-     * Solution wird erst bei Show solution sichtbar.
-     */
     if (showSolutionButton?.dataset.active !== "true") {
       solutionElement.hidden = true;
       return;
@@ -1032,56 +1020,41 @@
 
     solutionElement.hidden = false;
 
-    /*
-     * Nur Gruppen anzeigen, in denen wirklich
-     * mindestens ein Zeichen gemorst wurde.
-     */
-    const visibleGroups = typedGroups
-      .map((group, index) => ({
-        group,
-        index,
-      }))
-      .filter(({ group }) => Array.isArray(group) && group.length > 0);
+    typedGroups.forEach((typedGroup, groupIndex) => {
+      const expectedGroup = expectedGroups[groupIndex];
 
-    visibleGroups.forEach(({ group, index }, visibleIndex) => {
-      /*
-       * WICHTIG:
-       *
-       * Vor der ersten Trainingsgruppe kommt
-       * der Abstand nach VVV / KA.
-       *
-       * Dadurch wird aus:
-       *
-       * VVV   KA EEEEE
-       *
-       * wieder:
-       *
-       * VVV   KA   EEEEE
-       */
-      if (visibleIndex === 0) {
-        solutionElement.appendChild(createSolutionGap());
-      }
-
-      const expectedGroup = expectedGroups[index];
-
-      if (!expectedGroup) {
+      if (!expectedGroup || !typedGroup?.length) {
         return;
       }
 
-      const groupElement = createSolutionGroup(group, expectedGroup);
+      solutionElement.appendChild(
+        createSolutionGroup(typedGroup, expectedGroup),
+      );
 
-      solutionElement.appendChild(groupElement);
+      if (groupIndex < typedGroups.length - 1) {
+        const groupGap = document.createElement("span");
 
-      /*
-       * Abstand zwischen den logischen
-       * Trainingsgruppen.
-       *
-       * Nicht zwischen einzelnen Zeichen.
-       */
-      if (visibleIndex < visibleGroups.length - 1) {
-        solutionElement.appendChild(createSolutionGap());
+        groupGap.className = "cwtype-solution-group-gap";
+
+        groupGap.textContent = "   ";
+
+        solutionElement.appendChild(groupGap);
       }
     });
+  }
+
+  function showSolution() {
+    if (!solutionElement) {
+      return;
+    }
+
+    if (showSolutionButton) {
+      showSolutionButton.dataset.active = "true";
+    }
+
+    solutionElement.hidden = false;
+
+    updateSolution();
   }
 
   function toggleSolution() {
@@ -1092,22 +1065,19 @@
     const active = showSolutionButton?.dataset.active === "true";
 
     if (active) {
-      showSolutionButton.dataset.active = "false";
+      if (showSolutionButton) {
+        showSolutionButton.dataset.active = "false";
+      }
 
       solutionElement.hidden = true;
-
       return;
     }
 
-    showSolutionButton.dataset.active = "true";
-
-    solutionElement.hidden = false;
-
-    updateSolution();
+    showSolution();
   }
 
   /* =========================================================
-     VISUAL GROUP
+     VISUELLE GRUPPE
      ========================================================= */
 
   function createGroupElement(group) {
@@ -1166,7 +1136,6 @@
     line.style.position = "absolute";
 
     line.style.top = "50%";
-
     line.style.transform = "translateY(-50%)";
 
     line.style.display = "flex";
@@ -1175,37 +1144,22 @@
 
     line.style.whiteSpace = "nowrap";
 
-    line.style.height = "auto";
-    line.style.margin = "0";
-    line.style.padding = "0";
-
-    /* VVV */
-
     const vvv = document.createElement("span");
 
     vvv.className = "cwtype-vvv";
 
     vvv.textContent = "VVV";
 
-    vvv.style.display = "inline-block";
-
     line.appendChild(vvv);
-
-    /* VVV GAP */
 
     const vvvGap = document.createElement("span");
 
     vvvGap.className = "cwtype-gap cwtype-gap-vvv";
 
-    vvvGap.style.display = "inline-block";
-
     vvvGap.style.width = "0.8em";
-
     vvvGap.style.flex = "0 0 0.8em";
 
     line.appendChild(vvvGap);
-
-    /* KA */
 
     const ka = document.createElement("span");
 
@@ -1213,41 +1167,24 @@
 
     ka.textContent = "KA";
 
-    ka.style.display = "inline-block";
-
     line.appendChild(ka);
-
-    /* KA GAP */
 
     const kaGap = document.createElement("span");
 
     kaGap.className = "cwtype-gap cwtype-gap-ka";
 
-    kaGap.style.display = "inline-block";
-
     kaGap.style.width = "0.8em";
-
     kaGap.style.flex = "0 0 0.8em";
 
     line.appendChild(kaGap);
 
-    /* TRAINING GROUPS */
-
     currentGroups.forEach((group, groupIndex) => {
-      const groupElement = createGroupElement(group);
+      line.appendChild(createGroupElement(group));
 
-      line.appendChild(groupElement);
-
-      /*
-       * Abstand zwischen den 5er-Gruppen
-       * im Laufband.
-       */
       if (groupIndex < currentGroups.length - 1) {
         const groupGap = document.createElement("span");
 
         groupGap.className = "cwtype-group-gap";
-
-        groupGap.style.display = "inline-block";
 
         groupGap.style.width = "0.9em";
 
@@ -1257,29 +1194,20 @@
       }
     });
 
-    /* PLUS GAP */
-
     const plusGap = document.createElement("span");
 
     plusGap.className = "cwtype-gap cwtype-gap-plus";
 
-    plusGap.style.display = "inline-block";
-
     plusGap.style.width = "0.8em";
-
     plusGap.style.flex = "0 0 0.8em";
 
     line.appendChild(plusGap);
-
-    /* PLUS */
 
     const plus = document.createElement("span");
 
     plus.className = "cwtype-plus";
 
     plus.textContent = "+";
-
-    plus.style.display = "inline-block";
 
     line.appendChild(plus);
 
@@ -1291,15 +1219,16 @@
       showSolutionButton.dataset.active = "false";
     }
 
+    if (solutionElement) {
+      solutionElement.hidden = true;
+    }
+
     return line;
   }
 
   /* =========================================================
      POSITION
      ========================================================= */
-
-  let startX = 0;
-  let endX = 0;
 
   function layout(line) {
     const band = laufband.getBoundingClientRect();
@@ -1328,14 +1257,16 @@
      ANIMATION
      ========================================================= */
 
-  let animationFrame = null;
-
   let running = false;
   let paused = false;
 
+  let animationFrame = null;
   let startTime = 0;
   let elapsed = 0;
   let duration = 1;
+
+  let startX = 0;
+  let endX = 0;
 
   function stopAnimation() {
     if (animationFrame !== null) {
@@ -1346,13 +1277,7 @@
   }
 
   function animate(timestamp) {
-    if (!running) {
-      return;
-    }
-
-    if (paused) {
-      animationFrame = requestAnimationFrame(animate);
-
+    if (!running || paused) {
       return;
     }
 
@@ -1366,9 +1291,7 @@
 
     if (progress >= 1) {
       setX(endX);
-
       finish();
-
       return;
     }
 
@@ -1386,6 +1309,12 @@
     paused = false;
     elapsed = 0;
 
+    toneStop();
+
+    if (keyDown) {
+      finishKeyStroke();
+    }
+
     finishMorseCharacter();
 
     track.style.visibility = "hidden";
@@ -1395,7 +1324,6 @@
 
       requestAnimationFrame(() => {
         layout(line);
-
         setX(startX);
 
         duration = getDuration();
@@ -1418,7 +1346,6 @@
       });
     } catch (error) {
       console.error(error);
-
       track.style.visibility = "visible";
     }
   }
@@ -1428,12 +1355,17 @@
      ========================================================= */
 
   async function start() {
+    if (running) {
+      return;
+    }
+
     stopAnimation();
 
-    /*
-     * AudioContext durch Benutzeraktion aktivieren.
-     */
-    await ensureAudio();
+    const audioOK = await ensureAudio();
+
+    if (!audioOK) {
+      console.warn("CW audio could not be initialized.");
+    }
 
     track.style.visibility = "hidden";
 
@@ -1474,7 +1406,6 @@
       });
     } catch (error) {
       console.error(error);
-
       track.style.visibility = "visible";
     }
   }
@@ -1491,9 +1422,13 @@
     if (!paused) {
       paused = true;
 
+      toneStop();
+
       if (pauseButton) {
         pauseButton.textContent = "▶ Resume";
       }
+
+      stopAnimation();
 
       return;
     }
@@ -1505,6 +1440,8 @@
     if (pauseButton) {
       pauseButton.textContent = "⏸ Pause";
     }
+
+    animationFrame = requestAnimationFrame(animate);
   }
 
   /* =========================================================
@@ -1518,13 +1455,13 @@
     paused = false;
     elapsed = 0;
 
+    toneStop();
+
     if (keyDown) {
       finishKeyStroke();
     }
 
     finishMorseCharacter();
-
-    toneStop();
 
     setX(startX);
 
@@ -1553,11 +1490,11 @@
     running = false;
     paused = false;
 
+    toneStop();
+
     setX(endX);
 
     finishMorseCharacter();
-
-    toneStop();
 
     if (startButton) {
       startButton.disabled = false;
@@ -1598,7 +1535,6 @@
       abbreviationData = [];
 
       populateLessons();
-
       rebuild();
 
       return;
@@ -1672,17 +1608,9 @@
     }
   });
 
-  toneInput?.addEventListener("input", () => {
-    /*
-     * Neue Frequenz gilt beim nächsten Ton.
-     */
-  });
+  toneInput?.addEventListener("input", updateTone);
 
-  volumeInput?.addEventListener("input", () => {
-    if (audioActive && gainNode && audioContext) {
-      gainNode.gain.setValueAtTime(getVolume() / 100, audioContext.currentTime);
-    }
-  });
+  volumeInput?.addEventListener("input", updateVolume);
 
   startButton?.addEventListener("click", start);
 
