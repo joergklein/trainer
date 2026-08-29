@@ -2,9 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <title>CW Trainer</title>
+    <title>CW Listen</title>
 
     <link rel="stylesheet" href="assets/css/styles.css" />
   </head>
@@ -12,113 +13,185 @@
   <body>
     <main class="container">
       <header>
-        <h1>CW Trainer</h1>
+        <h1>CW Trainer - Listen</h1>
       </header>
 
       <section class="training">
-        <!-- Method -->
+        <!-- ==================================================
+             MODE SWITCH
+             ================================================== -->
+
         <div class="control-group">
-          <label for="method">Method</label>
+          <label>Mode</label>
 
-          <select id="method">
-            <option value="">Loading...</option>
-          </select>
-        </div>
+          <div class="mode-switch">
+            <span class="mode-label"> Listen </span>
 
-        <!-- Lesson -->
-        <div class="control-group">
-          <label for="lesson">Lesson</label>
+            <label class="mode-toggle">
+              <input id="mode-switch" type="checkbox" />
 
-          <select id="lesson">
-            <option value="">Loading...</option>
-          </select>
-        </div>
-
-        <!-- Custom CSV -->
-        <section class="custom-csv">
-          <div class="custom-csv-heading">
-            <p>Load your own csv file and train your own signs</p>
-          </div>
-
-          <div class="custom-csv-action">
-            <label class="file-button" for="custom-file">
-              Choose CSV file
+              <span class="mode-slider"></span>
             </label>
 
-            <input id="custom-file" type="file" accept=".csv,text/csv" hidden />
-          </div>
-
-          <div id="custom-files" class="custom-files" aria-live="polite"></div>
-        </section>
-
-        <!-- Characters -->
-        <div id="characters" class="characters"></div>
-
-        <!-- Settings -->
-        <div class="settings">
-          <div class="control-group">
-            <label for="groups">Groups</label>
-
-            <input id="groups" type="number" min="1" max="1000" value="50" />
-          </div>
-
-          <div class="control-group">
-            <label for="groupSize">Characters per group</label>
-
-            <input id="groupSize" type="number" min="1" max="20" value="5" />
-          </div>
-
-          <div class="control-group">
-            <label for="wpm">Speed (WPM)</label>
-
-            <input id="wpm" type="number" min="1" max="60" value="12" />
-          </div>
-
-          <div class="control-group">
-            <label for="tone">Tone (Hz)</label>
-
-            <input id="tone" type="number" min="100" max="2000" value="600" />
-          </div>
-
-          <div class="control-group">
-            <label for="volume">Volume</label>
-
-            <input id="volume" type="range" min="0" max="100" value="30" />
+            <span class="mode-label"> Send </span>
           </div>
         </div>
 
-        <!-- Training buttons -->
-        <div class="buttons">
-          <button id="start" type="button">▶ Start</button>
+        <!-- ==================================================
+             LISTEN MODE
+             ================================================== -->
 
-          <button id="pause" type="button" disabled>⏸ Pause</button>
+        <section id="listen-mode">
+          <!-- METHOD -->
 
-          <button id="stop" type="button" disabled>■ Stop</button>
-        </div>
+          <div class="control-group">
+            <label for="method"> Method </label>
 
-        <!-- Status -->
-        <section class="status">
-          <div id="status" class="status-text">Ready</div>
-
-          <div class="progress">
-            <div id="progress-bar" class="progress-bar"></div>
+            <select id="method">
+              <option value="">Loading...</option>
+            </select>
           </div>
 
-          <div id="counter" class="counter">0 / 0</div>
-        </section>
+          <!-- LESSON -->
 
-        <!-- Solution -->
-        <section class="solution-section">
-          <button id="show-solution" type="button" disabled>
-            Show solution
-          </button>
+          <div class="control-group">
+            <label for="lesson"> Lesson </label>
 
-          <pre id="solution" class="solution" hidden></pre>
+            <select id="lesson">
+              <option value="">Loading...</option>
+            </select>
+          </div>
+
+          <!-- ==================================================
+               CSV UPLOAD
+               ================================================== -->
+
+          <section class="custom-csv">
+            <div class="custom-csv-action">
+              <label class="file-button" for="custom-file">
+                Upload your CSV file
+              </label>
+
+              <input
+                id="custom-file"
+                type="file"
+                accept=".csv,text/csv"
+                hidden
+              />
+            </div>
+
+            <div
+              id="custom-files"
+              class="custom-files"
+              aria-live="polite"
+            ></div>
+          </section>
+
+          <!-- ==================================================
+               CHARACTERS
+               ================================================== -->
+
+          <div id="characters" class="characters"></div>
+
+          <!-- ==================================================
+               SETTINGS
+               ================================================== -->
+
+          <div class="settings">
+            <!-- GROUPS -->
+
+            <div class="control-group">
+              <label for="groups"> Groups </label>
+
+              <input id="groups" type="number" min="1" max="1000" value="50" />
+            </div>
+
+            <!-- CHARACTERS PER GROUP -->
+
+            <div class="control-group">
+              <label for="groupSize"> Characters per group </label>
+
+              <input id="groupSize" type="number" min="1" max="20" value="5" />
+            </div>
+
+            <!-- SPEED -->
+
+            <div class="control-group">
+              <label for="wpm"> Speed (WPM) </label>
+
+              <input id="wpm" type="number" min="1" max="60" value="12" />
+            </div>
+
+            <!-- TONE -->
+
+            <div class="control-group">
+              <label for="tone"> Tone (Hz) </label>
+
+              <input id="tone" type="number" min="100" max="2000" value="600" />
+            </div>
+
+            <!-- VOLUME -->
+
+            <div class="control-group">
+              <label for="volume"> Volume </label>
+
+              <input id="volume" type="range" min="0" max="100" value="30" />
+            </div>
+          </div>
+
+          <!-- ==================================================
+               TRAINER BUTTONS
+               ================================================== -->
+
+          <div class="buttons">
+            <button id="start" type="button">▶ Start</button>
+
+            <button id="pause" type="button" disabled>⏸ Pause</button>
+
+            <button id="stop" type="button" disabled>■ Stop</button>
+          </div>
+
+          <!-- ==================================================
+               STATUS
+               ================================================== -->
+
+          <section class="status">
+            <div id="status" class="status-text">Ready</div>
+
+            <div class="progress">
+              <div id="progress-bar" class="progress-bar"></div>
+            </div>
+
+            <div id="counter" class="counter">0 / 0</div>
+          </section>
+
+          <!-- ==================================================
+               SOLUTION
+               ================================================== -->
+
+          <section class="solution-section">
+            <button id="show-solution" type="button" disabled>
+              Show solution
+            </button>
+
+            <pre id="solution" class="solution" hidden></pre>
+          </section>
         </section>
       </section>
     </main>
 
+    <!-- ======================================================
+         LISTEN MODE SCRIPTS
+         ====================================================== -->
+
     <script src="assets/js/incwaudio.js"></script>
+
     <script src="assets/js/cwtrainer.js"></script>
+
+    <!-- ======================================================
+         MODE SWITCH
+         ====================================================== -->
+
+    <script src="assets/js/cwmode.js"></script>
   </body>
 </html>

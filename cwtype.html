@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>CW Send</title>
+
+    <link rel="stylesheet" href="assets/css/styles.css" />
+  </head>
+
+  <body>
+    <main class="container">
+      <header>
+        <h1>CW Trainer - Send</h1>
+      </header>
+
+      <section class="training">
+        <!-- ==================================================
+             MODE SWITCH
+             ================================================== -->
+
+        <div class="control-group">
+          <label>Mode</label>
+
+          <div class="mode-switch">
+            <span class="mode-label">Listen</span>
+
+            <label class="mode-toggle">
+              <input id="mode-switch" type="checkbox" />
+
+              <span class="mode-slider"></span>
+            </label>
+
+            <span class="mode-label">Send</span>
+          </div>
+        </div>
+
+        <!-- CSV UPLOAD -->
+
+        <section class="custom-csv">
+          <div class="custom-csv-action">
+            <label class="file-button" for="custom-file">
+              Upload your CSV file
+            </label>
+
+            <input id="custom-file" type="file" accept=".csv,text/csv" hidden />
+          </div>
+
+          <div id="custom-files" class="custom-files" aria-live="polite"></div>
+        </section>
+
+        <!-- METHOD -->
+
+        <div class="control-group">
+          <label for="method">Method</label>
+
+          <select id="method">
+            <option value="">Select method</option>
+          </select>
+        </div>
+
+        <!-- LESSON -->
+
+        <div class="control-group">
+          <label for="lesson">Lesson</label>
+
+          <select id="lesson">
+            <option value="">Select lesson</option>
+          </select>
+        </div>
+
+        <!-- SETTINGS -->
+
+        <div class="settings">
+          <div class="control-group">
+            <label for="groups">Groups</label>
+
+            <input id="groups" type="number" min="1" max="1000" value="50" />
+          </div>
+
+          <div class="control-group">
+            <label for="groupSize"> Characters per group </label>
+
+            <input id="groupSize" type="number" min="1" max="20" value="5" />
+          </div>
+
+          <div class="control-group">
+            <label for="wpm"> Speed (WPM) </label>
+
+            <input id="wpm" type="number" min="1" max="60" value="12" />
+          </div>
+        </div>
+
+        <!-- CW TYPE TRAINING -->
+
+        <section class="cwtype">
+          <div id="cwtype-laufband">
+            <div id="cwtype-marker"></div>
+
+            <div id="cwtype-track"></div>
+          </div>
+
+          <!-- BUTTONS -->
+
+          <div class="buttons">
+            <button id="cwtype-start" type="button">▶ Start</button>
+
+            <button id="cwtype-pause" type="button" disabled>⏸ Pause</button>
+
+            <button id="cwtype-stop" type="button" disabled>■ Stop</button>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <!-- CW TYPE -->
+
+    <script src="assets/js/cwtype.js"></script>
+
+    <!-- MODE SWITCH -->
+
+    <script src="assets/js/cwmode.js"></script>
+  </body>
+</html>

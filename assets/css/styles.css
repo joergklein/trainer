@@ -14,6 +14,10 @@
   font-display: swap;
 }
 
+/* ============================================================
+   RESET
+   ============================================================ */
+
 * {
   box-sizing: border-box;
 }
@@ -24,11 +28,19 @@ body {
   padding: 0;
 }
 
+/* ============================================================
+   BODY
+   ============================================================ */
+
 body {
   background: #f5f5f5;
   color: #202124;
   font-family: "IBM Plex Sans", sans-serif;
 }
+
+/* ============================================================
+   CONTAINER
+   ============================================================ */
 
 .container {
   width: min(1000px, 100%);
@@ -36,11 +48,19 @@ body {
   padding: 30px 20px 50px;
 }
 
+/* ============================================================
+   HEADER
+   ============================================================ */
+
 h1 {
   margin: 0 0 30px;
   font-size: 32px;
   font-weight: 600;
 }
+
+/* ============================================================
+   TRAINING
+   ============================================================ */
 
 .training {
   padding: 25px;
@@ -49,22 +69,145 @@ h1 {
   border-radius: 10px;
 }
 
+/* ============================================================
+   CONTROL GROUP
+   ============================================================ */
+
 .control-group {
   margin-bottom: 18px;
 }
 
-label {
+.control-group > label {
   display: block;
-  margin-bottom: 7px;
+  margin: 0 0 7px;
+  padding: 0;
   color: #555555;
   font-size: 14px;
   font-weight: 500;
 }
 
+/* ============================================================
+   MODE SWITCH
+   ============================================================ */
+
+.mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  height: 28px;
+  margin: 0 0 18px;
+  padding: 0;
+}
+
+.mode-label {
+  display: block;
+
+  height: 28px;
+  margin: 0;
+  padding: 0;
+
+  color: #555555;
+
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 28px;
+}
+
+.mode-toggle {
+  position: relative;
+
+  display: block;
+
+  width: 52px;
+  height: 28px;
+
+  margin: 0;
+  padding: 0;
+
+  flex: 0 0 52px;
+
+  cursor: pointer;
+}
+
+.mode-toggle input {
+  position: absolute;
+
+  width: 1px;
+  height: 1px;
+
+  margin: -1px;
+  padding: 0;
+
+  opacity: 0;
+}
+
+.mode-slider {
+  position: absolute;
+
+  top: 0;
+  left: 0;
+
+  width: 52px;
+  height: 28px;
+
+  margin: 0;
+  padding: 0;
+
+  background: #cccccc;
+
+  border: 1px solid #999999;
+  border-radius: 14px;
+
+  cursor: pointer;
+
+  transition: background-color 0.2s ease;
+}
+
+.mode-slider::before {
+  content: "";
+
+  position: absolute;
+
+  top: 2px;
+  left: 2px;
+
+  width: 22px;
+  height: 22px;
+
+  background: #ffffff;
+
+  border-radius: 50%;
+
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+
+  transform: translateX(0);
+
+  transition: transform 0.2s ease;
+}
+
+.mode-toggle input:checked + .mode-slider {
+  background: #777777;
+}
+
+.mode-toggle input:checked + .mode-slider::before {
+  transform: translateX(24px);
+}
+
+.mode-toggle input:focus-visible + .mode-slider {
+  outline: 2px solid #777777;
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   SELECTS / NUMBER INPUTS
+   ============================================================ */
+
 select,
 input[type="number"] {
   width: 100%;
   height: 42px;
+
   padding: 8px 12px;
 
   background: #ffffff;
@@ -77,6 +220,16 @@ input[type="number"] {
   font-size: 16px;
 }
 
+select:focus,
+input[type="number"]:focus {
+  outline: none;
+  border-color: #777777;
+}
+
+/* ============================================================
+   RANGE
+   ============================================================ */
+
 input[type="range"] {
   width: 100%;
 }
@@ -86,46 +239,27 @@ input[type="range"] {
    ============================================================ */
 
 .custom-csv {
-  margin: 22px 0 25px;
-  padding: 18px 20px;
-
-  background: #fafafa;
-  border: 1px solid #d8d8d8;
-  border-radius: 7px;
-}
-
-.custom-csv-heading {
-  margin-bottom: 15px;
-}
-
-.custom-csv-heading h2 {
-  margin: 0;
-
-  font-size: 17px;
-  font-weight: 600;
-}
-
-.custom-csv-heading p {
-  margin: 5px 0 0;
-
-  color: #666666;
-
-  font-size: 14px;
-  line-height: 1.5;
+  display: block;
+  width: 100%;
+  margin: 20px 0;
 }
 
 .custom-csv-action {
-  display: flex;
-  align-items: center;
+  display: block;
 }
 
-/* Real visible file button */
+/* ============================================================
+   CSV UPLOAD BUTTON
+   ============================================================ */
+
 .file-button {
   display: inline-flex;
+
   align-items: center;
   justify-content: center;
 
   min-height: 42px;
+
   padding: 9px 17px;
 
   background: #eeeeee;
@@ -135,6 +269,7 @@ input[type="range"] {
   border-radius: 5px;
 
   font-family: "IBM Plex Sans", sans-serif;
+
   font-size: 15px;
   font-weight: 500;
 
@@ -150,24 +285,30 @@ input[type="range"] {
   background: #d8d8d8;
 }
 
-/* Loaded files */
+/* ============================================================
+   CUSTOM FILE LIST
+   ============================================================ */
 
 .custom-files {
   display: flex;
+
   flex-direction: column;
+
   gap: 8px;
 
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
 .custom-file {
   display: flex;
+
   align-items: center;
   justify-content: space-between;
 
   gap: 12px;
 
   min-height: 44px;
+
   padding: 5px 6px 5px 12px;
 
   background: #ffffff;
@@ -182,6 +323,7 @@ input[type="range"] {
   color: #202124;
 
   font-family: "IBM Plex Mono", monospace;
+
   font-size: 14px;
 
   overflow: hidden;
@@ -193,6 +335,7 @@ input[type="range"] {
   flex: 0 0 auto;
 
   min-height: 34px;
+
   padding: 6px 13px;
 
   background: #f0d8d8;
@@ -202,6 +345,7 @@ input[type="range"] {
   border-radius: 5px;
 
   font-family: "IBM Plex Sans", sans-serif;
+
   font-size: 14px;
   font-weight: 500;
 
@@ -232,8 +376,10 @@ input[type="range"] {
   border-radius: 6px;
 
   font-family: "IBM Plex Mono", monospace;
+
   font-size: 18px;
   font-weight: 500;
+
   letter-spacing: 2px;
   line-height: 1.8;
 
@@ -262,6 +408,95 @@ input[type="range"] {
 }
 
 /* ============================================================
+   CWTYPE
+   ============================================================ */
+
+.cwtype {
+  width: 100%;
+}
+
+/* ============================================================
+   LAUFBAND
+   ============================================================ */
+
+#cwtype-laufband {
+  position: relative;
+
+  display: block;
+
+  width: 100%;
+  height: 80px;
+
+  margin: 25px 0;
+  padding: 0;
+
+  background: #d0d0d0;
+
+  border: 1px solid #aaaaaa;
+  border-radius: 6px;
+
+  overflow: hidden;
+}
+
+/* ============================================================
+   RED TRAINING MARKER
+   ============================================================ */
+
+#cwtype-marker {
+  position: absolute;
+
+  top: 0;
+  bottom: 0;
+
+  left: 50%;
+
+  width: 2px;
+
+  margin-left: -1px;
+
+  background: #d00000;
+
+  z-index: 20;
+
+  pointer-events: none;
+}
+
+/* ============================================================
+   MOVING TEXT
+   ============================================================ */
+
+#cwtype-track {
+  position: absolute;
+
+  top: 50%;
+  left: 0;
+
+  display: block;
+
+  width: max-content;
+  max-width: none;
+
+  margin: 0;
+  padding: 0;
+
+  color: #202124;
+
+  font-family: "IBM Plex Mono", monospace;
+
+  font-size: 22px;
+  font-weight: 500;
+
+  letter-spacing: 2px;
+  line-height: 1;
+
+  white-space: nowrap;
+
+  transform: translate3d(0, -50%, 0);
+
+  will-change: transform;
+}
+
+/* ============================================================
    BUTTONS
    ============================================================ */
 
@@ -287,6 +522,7 @@ button {
   border-radius: 5px;
 
   font-family: "IBM Plex Sans", sans-serif;
+
   font-size: 16px;
   font-weight: 500;
 
@@ -301,6 +537,10 @@ button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* ============================================================
+   LISTEN BUTTONS
+   ============================================================ */
 
 #start {
   background: #d9f0dc;
@@ -318,11 +558,31 @@ button:disabled {
 }
 
 /* ============================================================
+   CWTYPE BUTTONS
+   ============================================================ */
+
+#cwtype-start {
+  background: #d9f0dc;
+  border-color: #a9cfae;
+}
+
+#cwtype-pause {
+  background: #f1ebc9;
+  border-color: #d4c98c;
+}
+
+#cwtype-stop {
+  background: #f0d8d8;
+  border-color: #d2aaaa;
+}
+
+/* ============================================================
    STATUS
    ============================================================ */
 
 .status {
   margin-top: 30px;
+
   padding: 20px;
 
   background: #ffffff;
@@ -340,6 +600,10 @@ button:disabled {
   font-weight: 500;
 }
 
+/* ============================================================
+   PROGRESS
+   ============================================================ */
+
 .progress {
   width: 100%;
   height: 12px;
@@ -347,6 +611,7 @@ button:disabled {
   background: #dddddd;
 
   border-radius: 6px;
+
   overflow: hidden;
 }
 
@@ -359,12 +624,17 @@ button:disabled {
   transition: width 0.1s linear;
 }
 
+/* ============================================================
+   COUNTER
+   ============================================================ */
+
 .counter {
   margin-top: 10px;
 
   color: #666666;
 
   font-family: "IBM Plex Mono", monospace;
+
   font-size: 14px;
 }
 
@@ -382,6 +652,7 @@ button:disabled {
 
 .solution {
   margin-top: 15px;
+
   padding: 20px;
 
   background: #fafafa;
@@ -392,15 +663,25 @@ button:disabled {
   white-space: pre-wrap;
 
   font-family: "IBM Plex Mono", monospace;
+
   font-size: 18px;
   font-weight: 500;
+
   line-height: 1.6;
 
   overflow-x: auto;
 }
 
 /* ============================================================
-   MOBILE
+   HIDDEN
+   ============================================================ */
+
+[hidden] {
+  display: none !important;
+}
+
+/* ============================================================
+   TABLET
    ============================================================ */
 
 @media (max-width: 800px) {
@@ -408,6 +689,10 @@ button:disabled {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ============================================================
+   MOBILE
+   ============================================================ */
 
 @media (max-width: 600px) {
   .container {
@@ -431,14 +716,14 @@ button:disabled {
     letter-spacing: 2px;
   }
 
-  .custom-csv {
-    padding: 15px;
-  }
-
-  .custom-file {
-    align-items: center;
+  #cwtype-track {
+    font-size: 20px;
   }
 }
+
+/* ============================================================
+   SMALL MOBILE
+   ============================================================ */
 
 @media (max-width: 420px) {
   .buttons {
@@ -448,5 +733,9 @@ button:disabled {
   .buttons button {
     padding: 8px 5px;
     font-size: 14px;
+  }
+
+  .mode-switch {
+    gap: 10px;
   }
 }
