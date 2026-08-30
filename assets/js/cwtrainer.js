@@ -59,6 +59,7 @@ let playedSequence = [];
 let currentCharacter = 0;
 let running = false;
 let paused = false;
+
 let timer = null;
 let trainingGeneration = 0;
 
@@ -150,8 +151,7 @@ function setStatus(text) {
 
 function isAbbreviationMethod() {
   return (
-    currentMethod &&
-    (currentMethod.type === "abbreviations" || currentMethod.type === "custom")
+    currentMethod?.type === "abbreviations" || currentMethod?.type === "custom"
   );
 }
 
@@ -218,7 +218,7 @@ function parseCSVLine(line) {
 }
 
 function parseCSV(text) {
-  const lines = text
+  const lines = String(text)
     .replace(/^\uFEFF/, "")
     .split(/\r?\n/)
     .filter((line) => line.trim() !== "");
@@ -249,17 +249,12 @@ function parseCSV(text) {
     const abbreviation = values[abbreviationIndex].trim();
     const meaning = values[meaningIndex].trim();
 
-    if (!abbreviation) {
-      continue;
+    if (abbreviation) {
+      result.push({ abbreviation, meaning });
     }
-
-    result.push({
-      abbreviation,
-      meaning,
-    });
   }
 
-  if (result.length === 0) {
+  if (!result.length) {
     throw new Error("The CSV file contains no valid entries.");
   }
 
@@ -288,7 +283,7 @@ function renderCustomFiles() {
     return;
   }
 
-  customFilesElement.innerHTML = "";
+  customFilesElement.replaceChildren();
 
   for (const file of customFiles) {
     const row = document.createElement("div");
@@ -300,10 +295,7 @@ function renderCustomFiles() {
     const removeButton = document.createElement("button");
     removeButton.type = "button";
     removeButton.textContent = "Remove";
-
-    removeButton.addEventListener("click", () => {
-      removeCustomFile(file.id);
-    });
+    removeButton.addEventListener("click", () => removeCustomFile(file.id));
 
     row.append(name, removeButton);
     customFilesElement.appendChild(row);
@@ -316,11 +308,7 @@ async function addCustomFile(file) {
 
   const id = "custom-" + Date.now() + "-" + Math.random().toString(36).slice(2);
 
-  customFiles.push({
-    id,
-    name,
-    data,
-  });
+  customFiles.push({ id, name, data });
 
   renderCustomFiles();
   rebuildMethods(id);
@@ -356,10 +344,9 @@ function rebuildMethods(selectId = null) {
   }
 
   const previousId = selectId || currentMethod?.id || null;
-
   const allMethods = getAllMethods();
 
-  methodSelect.innerHTML = "";
+  methodSelect.replaceChildren();
 
   for (const method of allMethods) {
     if (!method?.id) {
@@ -374,12 +361,10 @@ function rebuildMethods(selectId = null) {
     methodSelect.appendChild(option);
   }
 
-  if (allMethods.length === 0) {
+  if (!allMethods.length) {
     currentMethod = null;
-
     populateLessons();
     updateCharacters();
-
     return;
   }
 
@@ -446,7 +431,6 @@ async function selectMethod() {
 
     populateLessons();
     updateCharacters();
-
     setStatus("Error loading training set: " + error.message);
 
     return;
@@ -454,7 +438,7 @@ async function selectMethod() {
 
   populateLessons();
 
-  if (lessonSelect.options.length > 0) {
+  if (lessonSelect.options.length) {
     lessonSelect.value = "1";
   }
 
@@ -477,7 +461,7 @@ function populateLessons() {
     return;
   }
 
-  lessonSelect.innerHTML = "";
+  lessonSelect.replaceChildren();
 
   for (let i = 1; i <= getLessonCount(); i++) {
     const option = document.createElement("option");
@@ -491,7 +475,6 @@ function populateLessons() {
 
 function selectLesson() {
   const value = Number(lessonSelect.value);
-
   const count = getLessonCount();
 
   currentLesson =
@@ -532,7 +515,6 @@ function updateCharacters() {
 
 function getGroupSettings() {
   let groups = parseInt(groupsInput.value, 10);
-
   let groupSize = parseInt(groupSizeInput.value, 10);
 
   if (!Number.isFinite(groups) || groups < 1) {
@@ -543,10 +525,7 @@ function getGroupSettings() {
     groupSize = 5;
   }
 
-  return {
-    groups,
-    groupSize,
-  };
+  return { groups, groupSize };
 }
 
 function dotMilliseconds() {
@@ -586,18 +565,16 @@ function getVolume() {
 function createCharacterSequence() {
   const available = getAlphabet().slice(0, currentLesson);
 
-  if (available.length === 0) {
+  if (!available.length) {
     return [];
   }
 
   const { groups, groupSize } = getGroupSettings();
-
   const sequence = [];
 
   for (let group = 0; group < groups; group++) {
     for (let i = 0; i < groupSize; i++) {
       const index = Math.floor(Math.random() * available.length);
-
       sequence.push(available[index]);
     }
 
@@ -612,18 +589,16 @@ function createCharacterSequence() {
 function createAbbreviationSequence() {
   const available = getAvailableAbbreviations();
 
-  if (available.length === 0) {
+  if (!available.length) {
     return [];
   }
 
   const { groups, groupSize } = getGroupSettings();
-
   const sequence = [];
 
   for (let group = 0; group < groups; group++) {
     for (let i = 0; i < groupSize; i++) {
       const index = Math.floor(Math.random() * available.length);
-
       sequence.push(available[index]);
     }
 
@@ -666,24 +641,15 @@ async function startAudio() {
     throw new Error("AudioContext konnte nicht gestartet werden.");
   }
 
-  /*
-   * Nicht künstlich warten.
-   *
-   * Wir warten nur darauf, dass die
-   * AudioContext-Zeit tatsächlich fortschreitet.
-   * Damit beginnt VVV erst nach der
-   * vollständigen Audio-Initialisierung.
-   */
   const startTime = audio.currentTime;
 
   await new Promise((resolve) => {
     const check = () => {
       if (audio.currentTime > startTime) {
         resolve();
-        return;
+      } else {
+        requestAnimationFrame(check);
       }
-
-      requestAnimationFrame(check);
     };
 
     check();
@@ -713,7 +679,6 @@ function playTone(duration, finished, generation) {
   if (paused) {
     timer = setTimeout(() => {
       timer = null;
-
       playTone(duration, finished, generation);
     }, 50);
 
@@ -724,11 +689,8 @@ function playTone(duration, finished, generation) {
     INCWAudio.tone(getToneFrequency(), duration / 1000, getVolume());
   } catch (error) {
     console.error(error);
-
     stopTraining();
-
     setStatus("Audio error: " + error.message);
-
     return;
   }
 
@@ -753,7 +715,6 @@ function waitUnits(units, finished, generation) {
   if (paused) {
     timer = setTimeout(() => {
       timer = null;
-
       waitUnits(units, finished, generation);
     }, 50);
 
@@ -786,7 +747,6 @@ function sendCode(
   if (paused) {
     timer = setTimeout(() => {
       timer = null;
-
       sendCode(code, finished, trailingGap, generation);
     }, 50);
 
@@ -816,12 +776,10 @@ function sendCode(
 
     if (index >= code.length) {
       waitUnits(trailingGap, finished, generation);
-
       return;
     }
 
     const symbol = code[index++];
-
     const duration = dotMilliseconds() * (symbol === "-" ? CW_DAH : CW_DIT);
 
     playTone(
@@ -854,7 +812,6 @@ function sendMorse(
 
   if (!code) {
     console.warn("No Morse code for:", character);
-
     finished();
     return;
   }
@@ -869,7 +826,7 @@ function sendAbbreviation(
 ) {
   const characters = Array.from(String(abbreviation));
 
-  if (characters.length === 0) {
+  if (!characters.length) {
     finished();
     return;
   }
@@ -896,7 +853,6 @@ function sendAbbreviation(
     }
 
     const character = characters[index++];
-
     const gap = index >= characters.length ? CW_WORD_GAP : CW_CHARACTER_GAP;
 
     sendMorse(character, nextCharacter, gap, generation);
@@ -949,12 +905,10 @@ function sendNextCharacter(generation = trainingGeneration) {
       () => sendNextCharacter(generation),
       generation,
     );
-
     return;
   }
 
   playedSequence.push(character);
-
   updateProgress();
 
   sendMorse(
@@ -983,7 +937,6 @@ function sendNextAbbreviation(generation = trainingGeneration) {
   }
 
   playedSequence.push(entry);
-
   updateProgress();
 
   sendAbbreviation(
@@ -1006,7 +959,7 @@ function sendNext(generation = trainingGeneration) {
    ============================================================ */
 
 function buildSolutionText() {
-  if (playedSequence.length === 0) {
+  if (!playedSequence.length) {
     return "";
   }
 
@@ -1015,7 +968,6 @@ function buildSolutionText() {
   }
 
   const { groupSize } = getGroupSettings();
-
   const groups = [];
 
   for (let i = 0; i < playedSequence.length; i += groupSize) {
@@ -1027,21 +979,19 @@ function buildSolutionText() {
 
 function updateProgress() {
   const total = countTrainingItems();
-
   const current = playedSequence.length;
 
-  counterElement.textContent = current + " / " + total;
+  counterElement.textContent = `${current} / ${total}`;
 
   progressBar.style.width = (total > 0 ? (current / total) * 100 : 0) + "%";
 }
 
 function showSolution() {
-  if (playedSequence.length === 0) {
+  if (!playedSequence.length) {
     return;
   }
 
   solutionElement.textContent = buildSolutionText();
-
   solutionElement.hidden = !solutionElement.hidden;
 }
 
@@ -1052,31 +1002,21 @@ function showSolution() {
 async function startTraining() {
   if (!currentMethod) {
     setStatus("No training set selected.");
-
     return;
   }
 
   trainingSequence = createTrainingSequence();
 
-  if (trainingSequence.length === 0) {
+  if (!trainingSequence.length) {
     setStatus("No training data available.");
-
     return;
   }
 
-  /*
-   * Wichtig:
-   * VVV und KA werden erst nach dem
-   * vollständig abgeschlossenen startAudio()
-   * gestartet.
-   */
   try {
     await startAudio();
   } catch (error) {
     console.error(error);
-
     setStatus(error.message);
-
     return;
   }
 
@@ -1097,13 +1037,11 @@ async function startTraining() {
   solutionButton.disabled = true;
 
   progressBar.style.width = "0%";
-
-  counterElement.textContent = "0 / " + countTrainingItems();
+  counterElement.textContent = `0 / ${countTrainingItems()}`;
 
   startButton.disabled = true;
   pauseButton.disabled = false;
   stopButton.disabled = false;
-
   pauseButton.textContent = "⏸ Pause";
 
   setStatus("VVV");
@@ -1121,7 +1059,6 @@ async function startTraining() {
       }
 
       setStatus("Training");
-
       sendNext(generation);
     }, generation);
   }, generation);
@@ -1137,7 +1074,6 @@ function togglePause() {
     clearTimer();
 
     pauseButton.textContent = "▶ Resume";
-
     setStatus("Paused");
 
     return;
@@ -1146,7 +1082,6 @@ function togglePause() {
   paused = false;
 
   pauseButton.textContent = "⏸ Pause";
-
   setStatus("Training");
 
   if (timer === null) {
@@ -1164,13 +1099,11 @@ function stopTraining() {
   stopAudio();
 
   solutionElement.textContent = buildSolutionText();
-
   solutionElement.hidden = true;
 
   startButton.disabled = false;
   pauseButton.disabled = true;
   stopButton.disabled = true;
-
   pauseButton.textContent = "⏸ Pause";
 
   setStatus("Stopped");
@@ -1201,17 +1134,15 @@ function finishTraining(generation = trainingGeneration) {
       startButton.disabled = false;
       pauseButton.disabled = true;
       stopButton.disabled = true;
-
       pauseButton.textContent = "⏸ Pause";
 
       progressBar.style.width = "100%";
 
       const total = countTrainingItems();
 
-      counterElement.textContent = total + " / " + total;
+      counterElement.textContent = `${total} / ${total}`;
 
       solutionElement.textContent = buildSolutionText();
-
       solutionElement.hidden = true;
 
       setStatus("Training finished");
@@ -1276,11 +1207,9 @@ async function loadIndex() {
     methods = data.methods;
 
     rebuildMethods();
-
     setStatus("Ready");
   } catch (error) {
     console.error(error);
-
     setStatus("Error loading: " + error.message);
   }
 }
@@ -1289,38 +1218,30 @@ async function loadIndex() {
    EVENTS
    ============================================================ */
 
-if (customFileInput) {
-  customFileInput.addEventListener("change", async () => {
-    const file = customFileInput.files?.[0];
+customFileInput?.addEventListener("change", async () => {
+  const file = customFileInput.files?.[0];
 
-    if (!file) {
-      return;
-    }
+  if (!file) {
+    return;
+  }
 
-    try {
-      setStatus("Loading " + file.name + " ...");
+  try {
+    setStatus("Loading " + file.name + " ...");
+    await addCustomFile(file);
+  } catch (error) {
+    console.error(error);
+    setStatus("Error loading CSV: " + error.message);
+  }
 
-      await addCustomFile(file);
-    } catch (error) {
-      console.error(error);
-
-      setStatus("Error loading CSV: " + error.message);
-    }
-
-    customFileInput.value = "";
-  });
-}
+  customFileInput.value = "";
+});
 
 methodSelect?.addEventListener("change", selectMethod);
-
 lessonSelect?.addEventListener("change", selectLesson);
 
 startButton?.addEventListener("click", startTraining);
-
 pauseButton?.addEventListener("click", togglePause);
-
 stopButton?.addEventListener("click", stopTraining);
-
 solutionButton?.addEventListener("click", showSolution);
 
 /* ============================================================

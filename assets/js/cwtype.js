@@ -42,9 +42,9 @@
 
   let currentGroups = [];
   let currentTiming = [];
-  let typedGroups = [];
   let expectedGroups = [];
 
+  let typedGroups = [];
   let currentTypedGroup = 0;
   let currentTypedIndex = 0;
 
@@ -53,56 +53,6 @@
   /* =========================================================
      AUDIO
      ========================================================= */
-
-  let audioContext = null;
-  let oscillator = null;
-  let gainNode = null;
-  let audioReady = false;
-  let audioActive = false;
-
-  async function ensureAudio() {
-    if (!audioContext) {
-      const AudioContextClass =
-        window.AudioContext || window.webkitAudioContext;
-
-      if (!AudioContextClass) {
-        console.error("Web Audio API is not available.");
-        return false;
-      }
-
-      audioContext = new AudioContextClass();
-
-      oscillator = audioContext.createOscillator();
-      gainNode = audioContext.createGain();
-
-      oscillator.type = "sine";
-
-      oscillator.frequency.setValueAtTime(
-        getToneFrequency(),
-        audioContext.currentTime,
-      );
-
-      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-
-      oscillator.start();
-
-      audioReady = true;
-    }
-
-    if (audioContext.state === "suspended") {
-      try {
-        await audioContext.resume();
-      } catch (error) {
-        console.error("AudioContext resume failed:", error);
-        return false;
-      }
-    }
-
-    return audioContext.state === "running";
-  }
 
   function getToneFrequency() {
     const value = Number(toneInput?.value);
@@ -124,227 +74,41 @@
     return Math.max(0, Math.min(100, value));
   }
 
+  async function ensureAudio() {
+    try {
+      await INCWAudio.start();
+      return true;
+    } catch (error) {
+      console.error("CW audio could not be initialized:", error);
+      return false;
+    }
+  }
+
   async function toneStart() {
     const ready = await ensureAudio();
 
-    if (!ready || !audioContext || !oscillator || !gainNode) {
+    if (!ready) {
       return;
     }
 
-    const now = audioContext.currentTime;
-    const frequency = getToneFrequency();
-    const volume = getVolume() / 100;
-
-    oscillator.frequency.cancelScheduledValues(now);
-    oscillator.frequency.setValueAtTime(frequency, now);
-
-    gainNode.gain.cancelScheduledValues(now);
-    gainNode.gain.setValueAtTime(gainNode.gain.value, now);
-
-    gainNode.gain.linearRampToValueAtTime(volume, now + 0.008);
-
-    audioActive = true;
-  }
-
-  function toneStop() {
-    if (!audioContext || !gainNode || !audioReady) {
-      return;
-    }
-
-    const now = audioContext.currentTime;
-
-    gainNode.gain.cancelScheduledValues(now);
-
-    gainNode.gain.setValueAtTime(gainNode.gain.value, now);
-
-    gainNode.gain.linearRampToValueAtTime(0, now + 0.008);
-
-    audioActive = false;
-  }
-
-  function updateTone() {
-    if (!audioContext || !oscillator) {
-      return;
-    }
-
-    oscillator.frequency.setValueAtTime(
+    INCWAudio.tone(
       getToneFrequency(),
-      audioContext.currentTime,
+      getDitMilliseconds() / 1000,
+      getVolume() / 100,
     );
   }
 
+  function toneStop() {
+    INCWAudio.stop();
+  }
+
+  function updateTone() {
+    // INCWAudio erzeugt jeden Ton mit der aktuell gewählten Frequenz.
+  }
+
   function updateVolume() {
-    if (!audioContext || !gainNode) {
-      return;
-    }
-
-    const now = audioContext.currentTime;
-
-    if (audioActive) {
-      gainNode.gain.setValueAtTime(getVolume() / 100, now);
-    }
+    // Lautstärke wird beim nächsten Ton aus dem Eingabefeld gelesen.
   }
-
-  /* =========================================================
-     MORSE INPUT
-     ========================================================= */
-
-  let keyDown = false;
-  let keyDownStarted = 0;
-  let characterTimer = null;
-
-  function addMorseElement(element) {
-    if (element !== "." && element !== "-") {
-      return;
-    }
-
-    morseInput += element;
-  }
-
-  function finishMorseCharacter() {
-    if (!morseInput) {
-      return;
-    }
-
-    const character = MORSE_REVERSE[morseInput] || "?";
-
-    addTypedCharacter(character);
-
-    morseInput = "";
-  }
-
-  function finishKeyStroke() {
-    if (!keyDownStarted) {
-      return;
-    }
-
-    const durationMs = performance.now() - keyDownStarted;
-
-    keyDownStarted = 0;
-    keyDown = false;
-
-    toneStop();
-
-    const dit = getDitMilliseconds();
-
-    const element = durationMs >= dit * 2 ? "-" : ".";
-
-    addMorseElement(element);
-  }
-
-  function scheduleCharacterFinish() {
-    if (characterTimer !== null) {
-      clearTimeout(characterTimer);
-    }
-
-    characterTimer = window.setTimeout(() => {
-      characterTimer = null;
-      finishMorseCharacter();
-    }, getDitMilliseconds() * 3);
-  }
-
-  /* =========================================================
-     KEYBOARD
-     ========================================================= */
-
-  async function handleSpaceDown(event) {
-    if (event.code !== "Space") {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (event.repeat) {
-      return;
-    }
-
-    /* Ctrl + Space = Pause / Resume */
-
-    if (event.ctrlKey) {
-      if (keyDown) {
-        finishKeyStroke();
-      }
-
-      togglePause();
-      return;
-    }
-
-    /* Space = Start / Morse key */
-
-    if (!running) {
-      await start();
-    }
-
-    if (!running || paused) {
-      return;
-    }
-
-    if (keyDown) {
-      return;
-    }
-
-    if (characterTimer !== null) {
-      clearTimeout(characterTimer);
-      characterTimer = null;
-    }
-
-    keyDown = true;
-    keyDownStarted = performance.now();
-
-    await toneStart();
-  }
-
-  function handleSpaceUp(event) {
-    if (event.code !== "Space") {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (event.ctrlKey) {
-      return;
-    }
-
-    if (!keyDown) {
-      return;
-    }
-
-    finishKeyStroke();
-    scheduleCharacterFinish();
-  }
-
-  /* Ctrl + X = Stop + Show solution */
-
-  function handleControlX(event) {
-    if (!event.ctrlKey || event.key.toLowerCase() !== "x") {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (keyDown) {
-      finishKeyStroke();
-    }
-
-    stop();
-    showSolution();
-  }
-
-  function handleWindowBlur() {
-    if (keyDown) {
-      finishKeyStroke();
-    } else {
-      toneStop();
-    }
-  }
-
-  window.addEventListener("keydown", handleSpaceDown);
-
-  window.addEventListener("keyup", handleSpaceUp);
-
-  window.addEventListener("keydown", handleControlX);
-
-  window.addEventListener("blur", handleWindowBlur);
 
   /* =========================================================
      MORSE
@@ -436,10 +200,6 @@
     return 1200 / getWpm();
   }
 
-  /* =========================================================
-     MORSE UNITS
-     ========================================================= */
-
   function morseUnits(character) {
     const code = MORSE[String(character).toUpperCase()];
 
@@ -507,10 +267,6 @@
     return units + CW_WORD_GAP;
   }
 
-  /* =========================================================
-     TIMING
-     ========================================================= */
-
   function buildTimingSequence(groups) {
     const sequence = [
       {
@@ -555,12 +311,306 @@
   }
 
   /* =========================================================
+     KEY INPUT
+     ========================================================= */
+
+  let keyDown = false;
+  let keyDownStarted = 0;
+  let characterTimer = null;
+
+  function addMorseElement(element) {
+    if (element === "." || element === "-") {
+      morseInput += element;
+    }
+  }
+
+  function finishMorseCharacter() {
+    if (!morseInput) {
+      return;
+    }
+
+    const character = MORSE_REVERSE[morseInput] || "?";
+
+    addTypedCharacter(character);
+
+    morseInput = "";
+  }
+
+  function finishKeyStroke() {
+    if (!keyDownStarted) {
+      return;
+    }
+
+    const durationMs = performance.now() - keyDownStarted;
+
+    keyDownStarted = 0;
+    keyDown = false;
+
+    toneStop();
+
+    const element = durationMs >= getDitMilliseconds() * 2 ? "-" : ".";
+
+    addMorseElement(element);
+  }
+
+  function scheduleCharacterFinish() {
+    if (characterTimer !== null) {
+      clearTimeout(characterTimer);
+    }
+
+    characterTimer = window.setTimeout(() => {
+      characterTimer = null;
+      finishMorseCharacter();
+    }, getDitMilliseconds() * 3);
+  }
+
+  async function handleSpaceDown(event) {
+    if (event.code !== "Space") {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (event.repeat) {
+      return;
+    }
+
+    if (event.ctrlKey) {
+      if (keyDown) {
+        finishKeyStroke();
+      }
+
+      togglePause();
+      return;
+    }
+
+    if (!running) {
+      await start();
+    }
+
+    if (!running || paused || keyDown) {
+      return;
+    }
+
+    if (characterTimer !== null) {
+      clearTimeout(characterTimer);
+      characterTimer = null;
+    }
+
+    keyDown = true;
+    keyDownStarted = performance.now();
+
+    await toneStart();
+  }
+
+  function handleSpaceUp(event) {
+    if (event.code !== "Space") {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (event.ctrlKey || !keyDown) {
+      return;
+    }
+
+    finishKeyStroke();
+    scheduleCharacterFinish();
+  }
+
+  function handleControlX(event) {
+    if (!event.ctrlKey || event.key.toLowerCase() !== "x") {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (keyDown) {
+      finishKeyStroke();
+    }
+
+    stop();
+    showSolution();
+  }
+
+  function handleWindowBlur() {
+    if (keyDown) {
+      finishKeyStroke();
+    } else {
+      toneStop();
+    }
+  }
+
+  window.addEventListener("keydown", handleSpaceDown);
+  window.addEventListener("keyup", handleSpaceUp);
+  window.addEventListener("keydown", handleControlX);
+  window.addEventListener("blur", handleWindowBlur);
+
+  /* =========================================================
+     SOLUTION
+     ========================================================= */
+
+  function resetSolutionData() {
+    typedGroups = [];
+    currentTypedGroup = 0;
+    currentTypedIndex = 0;
+    morseInput = "";
+
+    if (characterTimer !== null) {
+      clearTimeout(characterTimer);
+      characterTimer = null;
+    }
+
+    if (showSolutionButton) {
+      showSolutionButton.dataset.active = "false";
+    }
+
+    if (solutionElement) {
+      solutionElement.hidden = true;
+    }
+
+    updateSolution();
+  }
+
+  function addTypedCharacter(character) {
+    if (currentTypedGroup >= expectedGroups.length) {
+      return;
+    }
+
+    const expectedGroup = expectedGroups[currentTypedGroup];
+
+    if (currentTypedIndex >= expectedGroup.length) {
+      return;
+    }
+
+    if (!typedGroups[currentTypedGroup]) {
+      typedGroups[currentTypedGroup] = [];
+    }
+
+    typedGroups[currentTypedGroup].push(character);
+
+    currentTypedIndex++;
+
+    if (currentTypedIndex >= expectedGroup.length) {
+      currentTypedGroup++;
+      currentTypedIndex = 0;
+    }
+
+    updateSolution();
+  }
+
+  function createSolutionGroup(typedGroup, expectedGroup) {
+    const groupElement = document.createElement("span");
+
+    groupElement.className = "cwtype-solution-group";
+
+    typedGroup.forEach((typedCharacter, index) => {
+      const expectedCharacter = expectedGroup[index];
+
+      const characterElement = document.createElement("span");
+
+      characterElement.className = "cwtype-solution-character";
+      characterElement.textContent = typedCharacter;
+
+      if (
+        String(typedCharacter).toUpperCase() ===
+        String(expectedCharacter).toUpperCase()
+      ) {
+        characterElement.classList.add("correct");
+      } else {
+        characterElement.classList.add("wrong");
+        characterElement.title = "Expected: " + expectedCharacter;
+      }
+
+      groupElement.appendChild(characterElement);
+
+      if (index < typedGroup.length - 1) {
+        const gap = document.createElement("span");
+
+        gap.className = "cwtype-solution-character-gap";
+        gap.textContent = " ";
+
+        groupElement.appendChild(gap);
+      }
+    });
+
+    return groupElement;
+  }
+
+  function updateSolution() {
+    if (!solutionElement) {
+      return;
+    }
+
+    solutionElement.replaceChildren();
+
+    if (showSolutionButton?.dataset.active !== "true") {
+      solutionElement.hidden = true;
+      return;
+    }
+
+    solutionElement.hidden = false;
+
+    typedGroups.forEach((typedGroup, groupIndex) => {
+      const expectedGroup = expectedGroups[groupIndex];
+
+      if (!expectedGroup || !typedGroup?.length) {
+        return;
+      }
+
+      solutionElement.appendChild(
+        createSolutionGroup(typedGroup, expectedGroup),
+      );
+
+      if (groupIndex < typedGroups.length - 1) {
+        const groupGap = document.createElement("span");
+
+        groupGap.className = "cwtype-solution-group-gap";
+        groupGap.textContent = "   ";
+
+        solutionElement.appendChild(groupGap);
+      }
+    });
+  }
+
+  function showSolution() {
+    if (!solutionElement) {
+      return;
+    }
+
+    if (showSolutionButton) {
+      showSolutionButton.dataset.active = "true";
+    }
+
+    solutionElement.hidden = false;
+    updateSolution();
+  }
+
+  function toggleSolution() {
+    if (!solutionElement) {
+      return;
+    }
+
+    const active = showSolutionButton?.dataset.active === "true";
+
+    if (active) {
+      if (showSolutionButton) {
+        showSolutionButton.dataset.active = "false";
+      }
+
+      solutionElement.hidden = true;
+      return;
+    }
+
+    showSolution();
+  }
+
+  /* =========================================================
      CSV
      ========================================================= */
 
   function parseCSVLine(line) {
     const values = [];
-
     let value = "";
     let quoted = false;
 
@@ -605,7 +655,6 @@
     const header = parseCSVLine(lines[0]).map((value) => value.toLowerCase());
 
     const abbreviationIndex = header.indexOf("abbreviation");
-
     const meaningIndex = header.indexOf("meaning");
 
     if (abbreviationIndex === -1 || meaningIndex === -1) {
@@ -618,7 +667,6 @@
       const values = parseCSVLine(lines[i]);
 
       const abbreviation = values[abbreviationIndex]?.trim() || "";
-
       const meaning = values[meaningIndex]?.trim() || "";
 
       if (!abbreviation) {
@@ -672,7 +720,6 @@
     }
 
     const previousId = selectId || currentMethod?.id || null;
-
     const allMethods = getAllMethods();
 
     methodSelect.replaceChildren();
@@ -717,29 +764,24 @@
 
     customFiles.forEach((file) => {
       const row = document.createElement("div");
-
       row.className = "custom-file";
 
       const name = document.createElement("span");
-
       name.textContent = file.name;
 
       const removeButton = document.createElement("button");
-
       removeButton.type = "button";
       removeButton.textContent = "Remove";
 
       removeButton.addEventListener("click", () => removeCustomFile(file.id));
 
       row.append(name, removeButton);
-
       customFilesElement.appendChild(row);
     });
   }
 
   async function addCustomFile(file) {
     const data = parseCSV(await file.text());
-
     const name = file.name.replace(/\.csv$/i, "");
 
     const id =
@@ -788,7 +830,6 @@
       }
 
       abbreviationData = file.data.slice();
-
       return;
     }
 
@@ -859,12 +900,11 @@
   }
 
   /* =========================================================
-     GROUP SETTINGS
+     TRAINING GROUPS
      ========================================================= */
 
   function getGroupSettings() {
     let groups = parseInt(groupsInput?.value, 10);
-
     let groupSize = parseInt(groupSizeInput?.value, 10);
 
     if (!Number.isFinite(groups) || groups < 1) {
@@ -881,10 +921,6 @@
     };
   }
 
-  /* =========================================================
-     TRAINING GROUPS
-     ========================================================= */
-
   function createTrainingGroups() {
     const available = getCurrentLessonValues();
 
@@ -893,7 +929,6 @@
     }
 
     const { groups, groupSize } = getGroupSettings();
-
     const result = [];
 
     for (let groupIndex = 0; groupIndex < groups; groupIndex++) {
@@ -912,198 +947,25 @@
   }
 
   /* =========================================================
-     SOLUTION
-     ========================================================= */
-
-  function resetSolutionData() {
-    typedGroups = [];
-    currentTypedGroup = 0;
-    currentTypedIndex = 0;
-    morseInput = "";
-
-    if (characterTimer !== null) {
-      clearTimeout(characterTimer);
-
-      characterTimer = null;
-    }
-
-    if (showSolutionButton) {
-      showSolutionButton.dataset.active = "false";
-    }
-
-    if (solutionElement) {
-      solutionElement.hidden = true;
-    }
-
-    updateSolution();
-  }
-
-  function addTypedCharacter(character) {
-    if (currentTypedGroup >= expectedGroups.length) {
-      return;
-    }
-
-    const expectedGroup = expectedGroups[currentTypedGroup];
-
-    if (currentTypedIndex >= expectedGroup.length) {
-      return;
-    }
-
-    if (!typedGroups[currentTypedGroup]) {
-      typedGroups[currentTypedGroup] = [];
-    }
-
-    typedGroups[currentTypedGroup].push(character);
-
-    currentTypedIndex++;
-
-    if (currentTypedIndex >= expectedGroup.length) {
-      currentTypedGroup++;
-      currentTypedIndex = 0;
-    }
-
-    updateSolution();
-  }
-
-  function createSolutionGroup(typedGroup, expectedGroup) {
-    const groupElement = document.createElement("span");
-
-    groupElement.className = "cwtype-solution-group";
-
-    typedGroup.forEach((typedCharacter, index) => {
-      const expectedCharacter = expectedGroup[index];
-
-      const characterElement = document.createElement("span");
-
-      characterElement.className = "cwtype-solution-character";
-
-      characterElement.textContent = typedCharacter;
-
-      if (
-        String(typedCharacter).toUpperCase() ===
-        String(expectedCharacter).toUpperCase()
-      ) {
-        characterElement.classList.add("correct");
-      } else {
-        characterElement.classList.add("wrong");
-
-        characterElement.title = "Expected: " + expectedCharacter;
-      }
-
-      groupElement.appendChild(characterElement);
-
-      if (index < typedGroup.length - 1) {
-        const gap = document.createElement("span");
-
-        gap.className = "cwtype-solution-character-gap";
-
-        gap.textContent = " ";
-
-        groupElement.appendChild(gap);
-      }
-    });
-
-    return groupElement;
-  }
-
-  function updateSolution() {
-    if (!solutionElement) {
-      return;
-    }
-
-    solutionElement.replaceChildren();
-
-    if (showSolutionButton?.dataset.active !== "true") {
-      solutionElement.hidden = true;
-      return;
-    }
-
-    solutionElement.hidden = false;
-
-    typedGroups.forEach((typedGroup, groupIndex) => {
-      const expectedGroup = expectedGroups[groupIndex];
-
-      if (!expectedGroup || !typedGroup?.length) {
-        return;
-      }
-
-      solutionElement.appendChild(
-        createSolutionGroup(typedGroup, expectedGroup),
-      );
-
-      if (groupIndex < typedGroups.length - 1) {
-        const groupGap = document.createElement("span");
-
-        groupGap.className = "cwtype-solution-group-gap";
-
-        groupGap.textContent = "   ";
-
-        solutionElement.appendChild(groupGap);
-      }
-    });
-  }
-
-  function showSolution() {
-    if (!solutionElement) {
-      return;
-    }
-
-    if (showSolutionButton) {
-      showSolutionButton.dataset.active = "true";
-    }
-
-    solutionElement.hidden = false;
-
-    updateSolution();
-  }
-
-  function toggleSolution() {
-    if (!solutionElement) {
-      return;
-    }
-
-    const active = showSolutionButton?.dataset.active === "true";
-
-    if (active) {
-      if (showSolutionButton) {
-        showSolutionButton.dataset.active = "false";
-      }
-
-      solutionElement.hidden = true;
-      return;
-    }
-
-    showSolution();
-  }
-
-  /* =========================================================
-     VISUELLE GRUPPE
+     VISUAL GROUP
      ========================================================= */
 
   function createGroupElement(group) {
     const groupElement = document.createElement("span");
 
     groupElement.className = "cwtype-group";
-
     groupElement.style.display = "inline-flex";
-
     groupElement.style.alignItems = "center";
-
     groupElement.style.verticalAlign = "middle";
-
     groupElement.style.whiteSpace = "nowrap";
-
     groupElement.style.gap = "0.32em";
 
     group.forEach((item) => {
       const character = document.createElement("span");
 
       character.className = "cwtype-character";
-
       character.textContent = String(item);
-
       character.style.display = "inline-block";
-
       character.style.lineHeight = "1";
 
       groupElement.appendChild(character);
@@ -1132,81 +994,44 @@
     const line = document.createElement("div");
 
     line.className = "cwtype-line";
-
     line.style.position = "absolute";
-
     line.style.top = "50%";
     line.style.transform = "translateY(-50%)";
-
     line.style.display = "flex";
-
     line.style.alignItems = "center";
-
     line.style.whiteSpace = "nowrap";
 
     const vvv = document.createElement("span");
 
     vvv.className = "cwtype-vvv";
-
     vvv.textContent = "VVV";
 
     line.appendChild(vvv);
 
-    const vvvGap = document.createElement("span");
-
-    vvvGap.className = "cwtype-gap cwtype-gap-vvv";
-
-    vvvGap.style.width = "0.8em";
-    vvvGap.style.flex = "0 0 0.8em";
-
-    line.appendChild(vvvGap);
+    appendFixedGap(line, "cwtype-gap cwtype-gap-vvv");
 
     const ka = document.createElement("span");
 
     ka.className = "cwtype-ka";
-
     ka.textContent = "KA";
 
     line.appendChild(ka);
 
-    const kaGap = document.createElement("span");
-
-    kaGap.className = "cwtype-gap cwtype-gap-ka";
-
-    kaGap.style.width = "0.8em";
-    kaGap.style.flex = "0 0 0.8em";
-
-    line.appendChild(kaGap);
+    appendFixedGap(line, "cwtype-gap cwtype-gap-ka");
 
     currentGroups.forEach((group, groupIndex) => {
       line.appendChild(createGroupElement(group));
 
       if (groupIndex < currentGroups.length - 1) {
-        const groupGap = document.createElement("span");
-
-        groupGap.className = "cwtype-group-gap";
-
-        groupGap.style.width = "0.9em";
-
-        groupGap.style.flex = "0 0 0.9em";
-
-        line.appendChild(groupGap);
+        appendFixedGap(line, "cwtype-group-gap", "0.9em");
       }
     });
 
-    const plusGap = document.createElement("span");
-
-    plusGap.className = "cwtype-gap cwtype-gap-plus";
-
-    plusGap.style.width = "0.8em";
-    plusGap.style.flex = "0 0 0.8em";
-
-    line.appendChild(plusGap);
+    appendFixedGap(line, "cwtype-gap cwtype-gap-plus");
 
     const plus = document.createElement("span");
 
     plus.className = "cwtype-plus";
-
     plus.textContent = "+";
 
     line.appendChild(plus);
@@ -1215,7 +1040,6 @@
 
     if (showSolutionButton) {
       showSolutionButton.disabled = expectedGroups.length === 0;
-
       showSolutionButton.dataset.active = "false";
     }
 
@@ -1226,13 +1050,22 @@
     return line;
   }
 
+  function appendFixedGap(parent, className, width = "0.8em") {
+    const gap = document.createElement("span");
+
+    gap.className = className;
+    gap.style.width = width;
+    gap.style.flex = `0 0 ${width}`;
+
+    parent.appendChild(gap);
+  }
+
   /* =========================================================
      POSITION
      ========================================================= */
 
   function layout(line) {
     const band = laufband.getBoundingClientRect();
-
     const markerRect = marker.getBoundingClientRect();
 
     const markerX = markerRect.left - band.left + markerRect.width / 2;
@@ -1246,11 +1079,9 @@
   function setX(x) {
     const line = track.querySelector(".cwtype-line");
 
-    if (!line) {
-      return;
+    if (line) {
+      line.style.left = `${x}px`;
     }
-
-    line.style.left = `${x}px`;
   }
 
   /* =========================================================
@@ -1271,7 +1102,6 @@
   function stopAnimation() {
     if (animationFrame !== null) {
       cancelAnimationFrame(animationFrame);
-
       animationFrame = null;
     }
   }
@@ -1284,7 +1114,6 @@
     elapsed = timestamp - startTime;
 
     const progress = Math.min(1, elapsed / duration);
-
     const x = startX + (endX - startX) * progress;
 
     setX(x);
@@ -1330,23 +1159,30 @@
 
         track.style.visibility = "visible";
 
-        if (startButton) {
-          startButton.disabled = false;
-        }
-
-        if (pauseButton) {
-          pauseButton.disabled = true;
-
-          pauseButton.textContent = "⏸ Pause";
-        }
-
-        if (stopButton) {
-          stopButton.disabled = true;
-        }
+        updateButtons(false);
       });
     } catch (error) {
       console.error(error);
       track.style.visibility = "visible";
+    }
+  }
+
+  /* =========================================================
+     BUTTON STATE
+     ========================================================= */
+
+  function updateButtons(active) {
+    if (startButton) {
+      startButton.disabled = active;
+    }
+
+    if (pauseButton) {
+      pauseButton.disabled = !active;
+      pauseButton.textContent = "⏸ Pause";
+    }
+
+    if (stopButton) {
+      stopButton.disabled = !active;
     }
   }
 
@@ -1361,9 +1197,7 @@
 
     stopAnimation();
 
-    const audioOK = await ensureAudio();
-
-    if (!audioOK) {
+    if (!(await ensureAudio())) {
       console.warn("CW audio could not be initialized.");
     }
 
@@ -1376,7 +1210,6 @@
         layout(line);
 
         duration = getDuration();
-
         elapsed = 0;
 
         running = true;
@@ -1388,19 +1221,7 @@
 
         track.style.visibility = "visible";
 
-        if (startButton) {
-          startButton.disabled = true;
-        }
-
-        if (pauseButton) {
-          pauseButton.disabled = false;
-
-          pauseButton.textContent = "⏸ Pause";
-        }
-
-        if (stopButton) {
-          stopButton.disabled = false;
-        }
+        updateButtons(true);
 
         animationFrame = requestAnimationFrame(animate);
       });
@@ -1423,18 +1244,16 @@
       paused = true;
 
       toneStop();
+      stopAnimation();
 
       if (pauseButton) {
         pauseButton.textContent = "▶ Resume";
       }
 
-      stopAnimation();
-
       return;
     }
 
     startTime = performance.now() - elapsed;
-
     paused = false;
 
     if (pauseButton) {
@@ -1445,7 +1264,7 @@
   }
 
   /* =========================================================
-     STOP
+     STOP / FINISH
      ========================================================= */
 
   function stop() {
@@ -1464,25 +1283,8 @@
     finishMorseCharacter();
 
     setX(startX);
-
-    if (startButton) {
-      startButton.disabled = false;
-    }
-
-    if (pauseButton) {
-      pauseButton.disabled = true;
-
-      pauseButton.textContent = "⏸ Pause";
-    }
-
-    if (stopButton) {
-      stopButton.disabled = true;
-    }
+    updateButtons(false);
   }
-
-  /* =========================================================
-     FINISH
-     ========================================================= */
 
   function finish() {
     stopAnimation();
@@ -1491,28 +1293,14 @@
     paused = false;
 
     toneStop();
-
     setX(endX);
 
     finishMorseCharacter();
-
-    if (startButton) {
-      startButton.disabled = false;
-    }
-
-    if (pauseButton) {
-      pauseButton.disabled = true;
-
-      pauseButton.textContent = "⏸ Pause";
-    }
-
-    if (stopButton) {
-      stopButton.disabled = true;
-    }
+    updateButtons(false);
   }
 
   /* =========================================================
-     METHOD SELECTION
+     METHOD / LESSON
      ========================================================= */
 
   async function selectMethod() {
@@ -1533,7 +1321,6 @@
       console.error(error);
 
       abbreviationData = [];
-
       populateLessons();
       rebuild();
 
@@ -1549,13 +1336,8 @@
     rebuild();
   }
 
-  /* =========================================================
-     LESSON
-     ========================================================= */
-
   function selectLesson() {
     const value = Number(lessonSelect.value);
-
     const count = getLessonCount();
 
     currentLesson =
@@ -1587,7 +1369,6 @@
   });
 
   methodSelect?.addEventListener("change", selectMethod);
-
   lessonSelect?.addEventListener("change", selectLesson);
 
   groupsInput?.addEventListener("input", () => {
@@ -1609,13 +1390,10 @@
   });
 
   toneInput?.addEventListener("input", updateTone);
-
   volumeInput?.addEventListener("input", updateVolume);
 
   startButton?.addEventListener("click", start);
-
   pauseButton?.addEventListener("click", togglePause);
-
   stopButton?.addEventListener("click", stop);
 
   showSolutionButton?.addEventListener("click", toggleSolution);

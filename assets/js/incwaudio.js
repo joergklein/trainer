@@ -5,9 +5,14 @@ const INCWAudio = (() => {
 
   const ATTACK = 0.01;
   const RELEASE = 0.02;
+  const FADE_TIME = 0.015;
 
   const DEFAULT_FREQUENCY = 600;
   const DEFAULT_VOLUME = 0.3;
+
+  const MIN_FREQUENCY = 100;
+  const MAX_FREQUENCY = 2000;
+  const MAX_VOLUME = 0.8;
 
   const activeSources = new Set();
 
@@ -41,34 +46,44 @@ const INCWAudio = (() => {
     return audio;
   }
 
-  function safeFrequency(value) {
-    const frequency = Number(value);
+  function clamp(value, min, max, fallback) {
+    const number = Number(value);
 
-    if (!Number.isFinite(frequency)) {
-      return DEFAULT_FREQUENCY;
+    if (!Number.isFinite(number)) {
+      return fallback;
     }
 
-    return Math.max(100, Math.min(2000, frequency));
+    return Math.max(min, Math.min(max, number));
+  }
+
+  function safeFrequency(value) {
+    return clamp(value, MIN_FREQUENCY, MAX_FREQUENCY, DEFAULT_FREQUENCY);
   }
 
   function safeDuration(value) {
     const duration = Number(value);
 
-    if (!Number.isFinite(duration)) {
-      return 0.001;
-    }
-
-    return Math.max(0.001, duration);
+    return Number.isFinite(duration) ? Math.max(0.001, duration) : 0.001;
   }
 
   function safeVolume(value) {
-    const volume = Number(value);
+    return clamp(value, 0, MAX_VOLUME, DEFAULT_VOLUME);
+  }
 
-    if (!Number.isFinite(volume)) {
-      return DEFAULT_VOLUME;
+  function cleanup(oscillator, envelope) {
+    activeSources.delete(oscillator);
+
+    try {
+      oscillator.disconnect();
+    } catch {
+      // Bereits getrennt.
     }
 
-    return Math.max(0, Math.min(0.8, volume));
+    try {
+      envelope.disconnect();
+    } catch {
+      // Bereits getrennt.
+    }
   }
 
   function tone(frequency, duration, volume) {
@@ -78,33 +93,25 @@ const INCWAudio = (() => {
       return;
     }
 
-    const safeFreq = safeFrequency(frequency);
     const durationSeconds = safeDuration(duration);
-    const safeVol = safeVolume(volume);
+    const startTime = audio.currentTime;
+    const endTime = startTime + durationSeconds;
+
+    const attack = Math.min(ATTACK, durationSeconds / 3);
+    const release = Math.min(RELEASE, durationSeconds / 3);
 
     const oscillator = audio.createOscillator();
     const envelope = audio.createGain();
 
     oscillator.type = "sine";
-
-    const startTime = audio.currentTime;
-    const endTime = startTime + durationSeconds;
-
-    const attack = Math.min(ATTACK, durationSeconds / 3);
-
-    const release = Math.min(RELEASE, durationSeconds / 3);
-
-    const attackEnd = startTime + attack;
-    const releaseStart = endTime - release;
-
-    oscillator.frequency.setValueAtTime(safeFreq, startTime);
+    oscillator.frequency.setValueAtTime(safeFrequency(frequency), startTime);
 
     envelope.gain.setValueAtTime(0, startTime);
-
-    envelope.gain.linearRampToValueAtTime(safeVol, attackEnd);
-
-    envelope.gain.setValueAtTime(safeVol, releaseStart);
-
+    envelope.gain.linearRampToValueAtTime(
+      safeVolume(volume),
+      startTime + attack,
+    );
+    envelope.gain.setValueAtTime(safeVolume(volume), endTime - release);
     envelope.gain.linearRampToValueAtTime(0, endTime);
 
     oscillator.connect(envelope);
@@ -112,43 +119,24 @@ const INCWAudio = (() => {
 
     activeSources.add(oscillator);
 
-    oscillator.addEventListener(
-      "ended",
-      () => {
-        activeSources.delete(oscillator);
-
-        try {
-          oscillator.disconnect();
-        } catch {
-          // Bereits getrennt.
-        }
-
-        try {
-          envelope.disconnect();
-        } catch {
-          // Bereits getrennt.
-        }
-      },
-      { once: true },
-    );
+    oscillator.addEventListener("ended", () => cleanup(oscillator, envelope), {
+      once: true,
+    });
 
     oscillator.start(startTime);
     oscillator.stop(endTime);
   }
 
   function stop() {
-    const audio = ctx;
-
-    if (!audio || audio.state === "closed") {
+    if (!ctx || ctx.state === "closed") {
       return;
     }
 
-    const stopTime = audio.currentTime;
-    const fadeTime = 0.015;
+    const stopTime = ctx.currentTime + FADE_TIME;
 
     for (const oscillator of activeSources) {
       try {
-        oscillator.stop(stopTime + fadeTime);
+        oscillator.stop(stopTime);
       } catch {
         // Quelle wurde bereits beendet.
       }

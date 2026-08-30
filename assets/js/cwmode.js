@@ -7,17 +7,11 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  const isCWTypePage =
-    window.location.pathname.endsWith("/cwtype.html") ||
-    window.location.pathname.endsWith("cwtype.html");
+  const isCWTypePage = window.location.pathname.endsWith("cwtype.html");
 
   modeSwitch.checked = isCWTypePage;
 
   modeSwitch.addEventListener("change", () => {
-    if (modeSwitch.checked) {
-      window.location.href = "cwtype.html";
-    } else {
-      window.location.href = "index.html";
-    }
+    window.location.href = modeSwitch.checked ? "cwtype.html" : "index.html";
   });
 });

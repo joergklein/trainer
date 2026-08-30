@@ -1,35 +1,37 @@
 # CW Trainer
 
-Ein einfacher Morse-/CW-Trainer, der direkt im Browser läuft.
+Ein einfacher Morse-/CW-Trainer, der direkt im Browser ausgeführt wird.
 
 ## Schnellstart
 
-**CW Trainer** direkt in deinem Browser starten:
+Starte **CW Trainer** direkt in deinem Browser:
 
-[→ CW Trainer öffnen](https://dc8aj.github.io/cwtrainer/)
+[→ CW Trainer öffnen](https://dc8aj.github.io/cwtrainer/?utm_source=chatgpt.com)
 
 ## Funktionen
 
-- Auswahl einer CW-Methode
-- Eine Lektion pro Zeichen
-- Einstellbare Anzahl von Trainingsgruppen
-- Einstellbare Gruppengröße
-- Zufällige Auswahl der Trainingszeichen
-- Einstellbare CW-Geschwindigkeit
-- Einstellbare Tonfrequenz
-- Einstellbare Lautstärke
-- Start, Pause, Fortsetzen und Stoppen
-- Fortschrittsanzeige
-- Lösung erst nach dem Training
-- Eigene CSV-Dateien laden
-- Eigene CW-Abkürzungen und Problemfälle trainieren
-- Der Dateiname der CSV-Datei wird als Name des Trainingssatzes verwendet
+* Auswahl einer CW-Trainingsmethode
+* Eine Lektion pro Zeichen bei Standard-CW-Methoden
+* Eine Lektion pro Eintrag bei CW-Abkürzungsdateien
+* Einstellbare Anzahl von Trainingsgruppen
+* Einstellbare Zeichenzahl pro Gruppe
+* Zufällige Auswahl von Trainingszeichen oder Abkürzungen
+* Einstellbare CW-Geschwindigkeit
+* Einstellbare Tonfrequenz
+* Einstellbare Lautstärke
+* Start, Pause, Fortsetzen und Stoppen
+* Anzeige des Trainingsfortschritts
+* Lösung erst nach dem Training verfügbar
+* Eigene CSV-Dateien laden
+* CW-Abkürzungen und individuelle Problemfälle trainieren
+* Der Dateiname der CSV-Datei wird automatisch als Name des Trainingssatzes verwendet
+* Eigene CSV-Dateien werden lokal im Browser verarbeitet
 
 ## Eigene CSV-Dateien
 
-Eigene Trainingsdaten können über **Load your own CSV file** geladen werden.
+Du kannst eigene CSV-Dateien laden, um individuelle Trainingssätze für CW-Abkürzungen oder Problemfälle zu erstellen.
 
-Die CSV-Datei benötigt folgende Struktur:
+Die CSV-Datei muss diese beiden Spalten enthalten:
 
 ```text
 abbreviation,meaning
@@ -50,164 +52,233 @@ abbreviation,meaning
 
 Der Dateiname wird automatisch als Name des Trainingssatzes verwendet.
 
-Beispiel:
+Beispielsweise:
 
-`my-file.csv` wird als `my-file` angezeigt.
+```text
+my-file.csv
+```
 
-Die Datei wird ausschließlich im Browser verarbeitet und nicht auf den Server hochgeladen.
+wird angezeigt als:
 
-## Morse-Zeitverhältnisse
+```text
+my-file
+```
 
-Der Trainer verwendet die klassischen Morse-Zeitverhältnisse:
+Die CSV-Datei wird lokal im Browser verarbeitet. Sie wird **nicht auf den Server hochgeladen**.
 
-- Punkt = 1 Einheit
-- Strich = 3 Einheiten
-- Abstand innerhalb eines Zeichens = 1 Einheit
-- Abstand zwischen Zeichen = 3 Einheiten
-- Abstand zwischen Gruppen = 7 Einheiten
+## Morse-Timing
+
+Der Trainer verwendet die klassischen Morse-Timing-Verhältnisse:
+
+| Element                          |       Dauer |
+| -------------------------------- | ----------: |
+| Punkt                            |   1 Einheit |
+| Strich                           | 3 Einheiten |
+| Abstand innerhalb eines Zeichens |   1 Einheit |
+| Abstand zwischen Zeichen         | 3 Einheiten |
+| Abstand zwischen Gruppen/Wörtern | 7 Einheiten |
 
 ### Gruppenabstand
 
-Da ein Morsezeichen bereits einen Abstand von 3 Einheiten enthält, werden zwischen zwei Gruppen zusätzlich 4 Einheiten gewartet:
+Ein normales Morsezeichen endet bereits mit einem Abstand von 3 Einheiten.
 
-`7 - 3 = 4`
+Um den vollständigen Abstand von 7 Einheiten zwischen Gruppen zu erreichen, fügt der Trainer deshalb weitere 4 Einheiten hinzu:
 
-Damit beträgt der gesamte Gruppenabstand 7 Einheiten.
+```text
+7 - 3 = 4
+```
+
+Der resultierende Gesamt­abstand beträgt 7 Einheiten.
 
 ## Startsequenz
 
-Vor dem Training wird gesendet:
-
-`VVV`
-
-Danach folgt ein Abstand von 7 Einheiten.
-
-Anschließend wird `KA` als Prosign gesendet:
+Vor Beginn des eigentlichen Trainings sendet der Trainer:
 
 ```text
-    K = -.-
-    A = .-
-
-    KA = -.-.-
+VVV
 ```
 
-Zwischen K und A gibt es keinen normalen Zeichenabstand.
+Darauf folgt ein Abstand von 7 Einheiten.
+
+Anschließend wird `KA` als ein einziges Prosign gesendet:
+
+```text
+K = -.-
+A = .-
+
+KA = -.-.-
+```
+
+Zwischen `K` und `A` gibt es **keinen normalen Abstand von 3 Einheiten**.
 
 Danach folgt erneut ein Abstand von 7 Einheiten.
 
-Die Startsequenz lautet:
+Die vollständige Startsequenz lautet:
 
-`VVV → 7 Einheiten → KA → 7 Einheiten → TRAINING`
+```text
+VVV → 7 Einheiten → KA → 7 Einheiten → TRAINING
+```
 
 ## Lektionen
 
-Bei normalen CW-Methoden wird für jedes Zeichen des Alphabets eine Lektion erzeugt.
+Bei Standard-CW-Methoden wird für jedes Zeichen des konfigurierten Alphabets genau eine Lektion erstellt.
 
 Beispiel:
 
-`ETIAN`
+```text
+ETIAN
+```
 
 ergibt:
 
 ```text
-    Lektion 1 = E
-    Lektion 2 = T
-    Lektion 3 = I
-    Lektion 4 = A
-    Lektion 5 = N
+Lektion 1 = E
+Lektion 2 = T
+Lektion 3 = I
+Lektion 4 = A
+Lektion 5 = N
 ```
 
-In Lektion 3 stehen somit E, T und I zur Verfügung. Bei Abkürzungen entspricht jede Lektion einem Eintrag der CSV-Datei.
+In Lektion 3 stehen somit folgende Trainingszeichen zur Verfügung:
+
+```text
+E T I
+```
+
+Bei CW-Abkürzungsmethoden entspricht jede Lektion einem Eintrag aus der CSV-Datei.
 
 ## Trainingsanzeige
 
-Während des Trainings werden die gesendeten Zeichen nicht angezeigt.
+Die übertragenen Zeichen oder Abkürzungen werden **während des Trainings nicht angezeigt**.
+
+Dadurch kann der Trainer als tatsächliche Hörübung verwendet werden.
 
 ## Endsequenz
 
-Nach dem letzten Trainingszeichen folgt ein Abstand von 7 Einheiten.
+Nach dem letzten Trainingselement sendet der Trainer einen Abstand von 7 Einheiten.
 
-Danach wird `+` gesendet.
+Anschließend wird das Endzeichen `+` übertragen.
 
-Die vollständige Sequenz lautet:
+Die vollständige Trainingssequenz lautet daher:
 
-`VVV → 7 → KA → 7 → TRAINING → 7 → +`
+```text
+VVV → 7 → KA → 7 → TRAINING → 7 → +
+```
 
-Das Pluszeichen erhält keinen zusätzlichen Abstand, da das Training danach beendet ist.
+Das Zeichen `+` erhält keinen zusätzlichen Abstand, da das Training unmittelbar danach endet.
 
-## Morse-Code
+## Morsecode
 
-Die interne Morse-Tabelle enthält:
+Die interne Morsetabelle unterstützt:
 
-- A–Z
-- 0–9
-- Punkt
-- Komma
-- Fragezeichen
-- Schrägstrich
-- Gleichheitszeichen
-- Bindestrich
-- @
-- Doppelpunkt
-- Semikolon
-- Ausrufezeichen
-- Apostroph
-- Anführungszeichen
-- Plus
-- Klammern
-- Unterstrich
+* A–Z
+* 0–9
+* Punkt `.`
+* Komma `,`
+* Fragezeichen `?`
+* Schrägstrich `/`
+* Gleichheitszeichen `=`
+* Bindestrich `-`
+* At-Zeichen `@`
+* Doppelpunkt `:`
+* Semikolon `;`
+* Ausrufezeichen `!`
+* Apostroph `'`
+* Anführungszeichen `"`
+* Pluszeichen `+`
+* Klammern `(` `)`
+* Unterstrich `_`
 
 ## Geschwindigkeit
 
-Die Punktdauer wird aus der eingestellten Geschwindigkeit berechnet:
+Die Dauer eines Punktes wird anhand der eingestellten WPM-Geschwindigkeit berechnet:
 
-`Punktdauer = 1200 / WPM ms`
+```text
+Punktdauer = 1200 / WPM ms
+```
 
 Beispiel bei 12 WPM:
 
-`1200 / 12 = 100 ms`
+```text
+1200 / 12 = 100 ms
+```
 
-Daher
+Daraus ergeben sich folgende Zeiten:
 
 ```text
-    Punkt = 100 ms
-    Strich = 300 ms
-    Elementabstand = 100 ms
-    Zeichenabstand = 300 ms
-    Wortabstand = 700 ms
+Punkt                 = 100 ms
+Strich                = 300 ms
+Elementabstand        = 100 ms
+Zeichenabstand        = 300 ms
+Wort-/Gruppenabstand  = 700 ms
 ```
 
 ## Audio
 
-Die CW-Ausgabe verwendet die Web Audio API. Der Trainer erzeugt einen Sinuston. Tonhöhe und Lautstärke können über die Einstellungen angepasst werden.
+Die CW-Ausgabe verwendet die **Web Audio API** des Browsers.
 
-## Bedienung
+Der Trainer erzeugt einen Sinuston.
+
+Folgende Parameter können eingestellt werden:
+
+* Tonfrequenz
+* Lautstärke
+
+Das Audio wird beim Start einer Trainingseinheit initialisiert.
+
+## CWType
+
+CWType ist der Trainingsmodus für Morse-Tasteneingabe.
+
+Der Modus wird über den Modusschalter ausgewählt und ist vom normalen Hörtraining getrennt.
+
+CWType zeigt eine sich kontinuierlich bewegende Zeichenfolge mit einem festen roten Marker in der Mitte der Anzeige. Die Morsezeichen werden über die Tastatur als Morse-Taste eingegeben.
+
+Die CWType-Steuerung umfasst:
+
+* Training starten / Morse-Taste
+* Pause / Fortsetzen
+* Stoppen
+* Lösung anzeigen
+
+## Tastaturkürzel
+
+```text
+Space      = Training starten / Morse-Taste
+Ctrl+Space = Pause / Fortsetzen
+Ctrl+X     = Stoppen
+```
+
+Die `Space`-Taste startet das Training und dient während eines aktiven CWType-Trainings als Morse-Taste.
+
+`Ctrl+Space` pausiert das aktuelle Training oder setzt es fort.
+
+`Ctrl+X` beendet das aktuelle Training.
+
+Die `Space`-Taste wird von CWType nur verarbeitet, wenn kein interaktives Formularelement den Fokus besitzt.
+
+Wenn ein `INPUT`, `SELECT` oder `BUTTON`-Element den Fokus besitzt, behält die `Space`-Taste ihr normales Browser- bzw. Steuerelementverhalten.
+
+## Steuerung
 
 ### Start
 
-Startet ein neues Training.
+Startet eine neue Trainingseinheit mit einer neu erzeugten zufälligen Sequenz.
 
 ### Pause
 
-Pausiert das Training.
+Pausiert die aktuelle Trainingseinheit.
 
 ### Fortsetzen
 
-Setzt ein pausiertes Training fort.
+Setzt eine pausierte Trainingseinheit fort.
 
 ### Stop
 
-Beendet das Training.
+Beendet die aktuelle Trainingseinheit.
 
 ### Lösung anzeigen
 
-Zeigt die tatsächlich gesendete Trainingssequenz.
+Zeigt die tatsächliche Sequenz an, die während der Trainingseinheit übertragen wurde.
 
-## Tastatur
-
-```text
-Leertaste = Pause / Fortsetzen
-ESC       = Stop
-```
-
-Die Leertaste wird nicht verwendet, wenn ein Eingabefeld, eine Auswahl oder ein Button den Fokus besitzt.
+Die Lösung wird während des laufenden Trainings nicht automatisch angezeigt.
