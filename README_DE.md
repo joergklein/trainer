@@ -1,43 +1,45 @@
 # CW Trainer
 
-Ein einfacher Morse-/CW-Trainer, der direkt im Browser ausgeführt wird.
+A simple Morse/CW trainer that runs directly in the browser.
 
-## Schnellstart
+## Quickstart
 
-Starte **CW Trainer** direkt in deinem Browser:
+Launch **CW Trainer** directly in your browser:
 
-[→ CW Trainer öffnen](https://dc8aj.github.io/cwtrainer/?utm_source=chatgpt.com)
+[→ Open CW Trainer](https://dc8aj.github.io/cwtrainer/?utm_source=chatgpt.com)
 
-## Funktionen
+## Features
 
-* Auswahl einer CW-Trainingsmethode
-* Eine Lektion pro Zeichen bei Standard-CW-Methoden
-* Eine Lektion pro Eintrag bei CW-Abkürzungsdateien
-* Einstellbare Anzahl von Trainingsgruppen
-* Einstellbare Zeichenzahl pro Gruppe
-* Zufällige Auswahl von Trainingszeichen oder Abkürzungen
-* Einstellbare CW-Geschwindigkeit
-* Einstellbare Tonfrequenz
-* Einstellbare Lautstärke
-* Start, Pause, Fortsetzen und Stoppen
-* Anzeige des Trainingsfortschritts
-* Lösung erst nach dem Training verfügbar
-* Eigene CSV-Dateien laden
-* CW-Abkürzungen und individuelle Problemfälle trainieren
-* Der Dateiname der CSV-Datei wird automatisch als Name des Trainingssatzes verwendet
-* Eigene CSV-Dateien werden lokal im Browser verarbeitet
+* Select a CW training method
+* One lesson per character for standard CW methods
+* One lesson per entry for CW abbreviation files
+* Adjustable number of training groups
+* Adjustable group size
+* Random selection of training characters or abbreviations
+* Adjustable CW speed
+* Adjustable tone frequency
+* Adjustable volume
+* Start, Pause, Resume, and Stop
+* Training progress display
+* Solution available after training
+* Load custom CSV files
+* Train CW abbreviations and individual problem cases
+* CSV filename is automatically used as the training-set name
+* Custom CSV files are processed locally in the browser
+* CWType mode for Morse key training
+* Keyboard shortcuts for CWType
 
-## Eigene CSV-Dateien
+## Custom CSV Files
 
-Du kannst eigene CSV-Dateien laden, um individuelle Trainingssätze für CW-Abkürzungen oder Problemfälle zu erstellen.
+You can load your own CSV files to create individual training sets for CW abbreviations or problem cases.
 
-Die CSV-Datei muss diese beiden Spalten enthalten:
+The CSV file must contain these two columns:
 
 ```text
 abbreviation,meaning
 ```
 
-Beispiel:
+Example:
 
 ```text
 abbreviation,meaning
@@ -50,57 +52,57 @@ abbreviation,meaning
 "ab","all before"
 ```
 
-Der Dateiname wird automatisch als Name des Trainingssatzes verwendet.
+The filename is automatically used as the name of the training set.
 
-Beispielsweise:
+For example:
 
 ```text
 my-file.csv
 ```
 
-wird angezeigt als:
+is displayed as:
 
 ```text
 my-file
 ```
 
-Die CSV-Datei wird lokal im Browser verarbeitet. Sie wird **nicht auf den Server hochgeladen**.
+The CSV file is processed locally in the browser. It is **not uploaded to the server**.
 
-## Morse-Timing
+## Morse Timing
 
-Der Trainer verwendet die klassischen Morse-Timing-Verhältnisse:
+The trainer uses the classic Morse timing ratios:
 
-| Element                          |       Dauer |
-| -------------------------------- | ----------: |
-| Punkt                            |   1 Einheit |
-| Strich                           | 3 Einheiten |
-| Abstand innerhalb eines Zeichens |   1 Einheit |
-| Abstand zwischen Zeichen         | 3 Einheiten |
-| Abstand zwischen Gruppen/Wörtern | 7 Einheiten |
+| Element                  | Duration |
+| ------------------------ | -------: |
+| Dot                      |   1 unit |
+| Dash                     |  3 units |
+| Gap within a character   |   1 unit |
+| Gap between characters   |  3 units |
+| Gap between groups/words |  7 units |
 
-### Gruppenabstand
+### Group Gap
 
-Ein normales Morsezeichen endet bereits mit einem Abstand von 3 Einheiten.
+A normal Morse character already ends with a 3-unit character gap.
 
-Um den vollständigen Abstand von 7 Einheiten zwischen Gruppen zu erreichen, fügt der Trainer deshalb weitere 4 Einheiten hinzu:
+To create the full 7-unit gap between groups, the trainer therefore adds 4 additional units:
 
 ```text
 7 - 3 = 4
 ```
 
-Der resultierende Gesamt­abstand beträgt 7 Einheiten.
+The resulting total gap is 7 units.
 
-## Startsequenz
+## Start Sequence
 
-Vor Beginn des eigentlichen Trainings sendet der Trainer:
+Before the actual training begins, the trainer sends:
 
 ```text
 VVV
 ```
 
-Darauf folgt ein Abstand von 7 Einheiten.
+This is followed by a 7-unit gap.
 
-Anschließend wird `KA` als ein einziges Prosign gesendet:
+Next, `KA` is sent as a single prosign:
 
 ```text
 K = -.-
@@ -109,176 +111,176 @@ A = .-
 KA = -.-.-
 ```
 
-Zwischen `K` und `A` gibt es **keinen normalen Abstand von 3 Einheiten**.
+There is **no normal 3-unit character gap** between `K` and `A`.
 
-Danach folgt erneut ein Abstand von 7 Einheiten.
+Another 7-unit gap follows.
 
-Die vollständige Startsequenz lautet:
+The complete start sequence is:
 
 ```text
-VVV → 7 Einheiten → KA → 7 Einheiten → TRAINING
+VVV → 7 units → KA → 7 units → TRAINING
 ```
 
-## Lektionen
+## Lessons
 
-Bei Standard-CW-Methoden wird für jedes Zeichen des konfigurierten Alphabets genau eine Lektion erstellt.
+For standard CW methods, one lesson is created for each character in the configured alphabet.
 
-Beispiel:
+For example:
 
 ```text
 ETIAN
 ```
 
-ergibt:
+produces:
 
 ```text
-Lektion 1 = E
-Lektion 2 = T
-Lektion 3 = I
-Lektion 4 = A
-Lektion 5 = N
+Lesson 1 = E
+Lesson 2 = T
+Lesson 3 = I
+Lesson 4 = A
+Lesson 5 = N
 ```
 
-In Lektion 3 stehen somit folgende Trainingszeichen zur Verfügung:
+In Lesson 3, the available training characters are therefore:
 
 ```text
 E T I
 ```
 
-Bei CW-Abkürzungsmethoden entspricht jede Lektion einem Eintrag aus der CSV-Datei.
+For CW abbreviation methods, each lesson corresponds to one entry in the CSV file.
 
-## Trainingsanzeige
+## Training Display
 
-Die übertragenen Zeichen oder Abkürzungen werden **während des Trainings nicht angezeigt**.
+The characters or abbreviations being transmitted are **not displayed during training**.
 
-Dadurch kann der Trainer als tatsächliche Hörübung verwendet werden.
+This allows the trainer to be used as an actual listening exercise.
 
-## Endsequenz
+## End Sequence
 
-Nach dem letzten Trainingselement sendet der Trainer einen Abstand von 7 Einheiten.
+After the final training item, the trainer sends a 7-unit gap.
 
-Anschließend wird das Endzeichen `+` übertragen.
+The end character `+` is then transmitted.
 
-Die vollständige Trainingssequenz lautet daher:
+The complete session therefore follows this sequence:
 
 ```text
 VVV → 7 → KA → 7 → TRAINING → 7 → +
 ```
 
-Das Zeichen `+` erhält keinen zusätzlichen Abstand, da das Training unmittelbar danach endet.
+The `+` character does not receive an additional gap because the training session ends immediately afterward.
 
-## Morsecode
+## Morse Code
 
-Die interne Morsetabelle unterstützt:
+The internal Morse table supports:
 
 * A–Z
 * 0–9
-* Punkt `.`
-* Komma `,`
-* Fragezeichen `?`
-* Schrägstrich `/`
-* Gleichheitszeichen `=`
-* Bindestrich `-`
-* At-Zeichen `@`
-* Doppelpunkt `:`
-* Semikolon `;`
-* Ausrufezeichen `!`
-* Apostroph `'`
-* Anführungszeichen `"`
-* Pluszeichen `+`
-* Klammern `(` `)`
-* Unterstrich `_`
+* Period `.`
+* Comma `,`
+* Question mark `?`
+* Slash `/`
+* Equals sign `=`
+* Hyphen `-`
+* At sign `@`
+* Colon `:`
+* Semicolon `;`
+* Exclamation mark `!`
+* Apostrophe `'`
+* Quotation mark `"`
+* Plus sign `+`
+* Parentheses `(` `)`
+* Underscore `_`
 
-## Geschwindigkeit
+## Speed
 
-Die Dauer eines Punktes wird anhand der eingestellten WPM-Geschwindigkeit berechnet:
+The dot duration is calculated from the configured WPM value:
 
 ```text
-Punktdauer = 1200 / WPM ms
+Dot duration = 1200 / WPM ms
 ```
 
-Beispiel bei 12 WPM:
+For example, at 12 WPM:
 
 ```text
 1200 / 12 = 100 ms
 ```
 
-Daraus ergeben sich folgende Zeiten:
+The resulting timings are:
 
 ```text
-Punkt                 = 100 ms
-Strich                = 300 ms
-Elementabstand        = 100 ms
-Zeichenabstand        = 300 ms
-Wort-/Gruppenabstand  = 700 ms
+Dot                 = 100 ms
+Dash                = 300 ms
+Element gap         = 100 ms
+Character gap       = 300 ms
+Word/group gap      = 700 ms
 ```
 
 ## Audio
 
-Die CW-Ausgabe verwendet die **Web Audio API** des Browsers.
+The CW output uses the browser's **Web Audio API**.
 
-Der Trainer erzeugt einen Sinuston.
+The trainer generates a sine-wave tone.
 
-Folgende Parameter können eingestellt werden:
+The following parameters can be adjusted:
 
-* Tonfrequenz
-* Lautstärke
+* Tone frequency
+* Volume
 
-Das Audio wird beim Start einer Trainingseinheit initialisiert.
+Audio is initialized when a training session is started.
 
 ## CWType
 
-CWType ist der Trainingsmodus für Morse-Tasteneingabe.
+CWType is the training mode for Morse key input.
 
-Der Modus wird über den Modusschalter ausgewählt und ist vom normalen Hörtraining getrennt.
+The mode is selected using the mode switch and is separate from the normal listening trainer.
 
-CWType zeigt eine sich kontinuierlich bewegende Zeichenfolge mit einem festen roten Marker in der Mitte der Anzeige. Die Morsezeichen werden über die Tastatur als Morse-Taste eingegeben.
+CWType displays a continuously moving character sequence with a fixed red marker in the center of the display. Morse characters are entered using the keyboard as a Morse key.
 
-Die CWType-Steuerung umfasst:
+CWType provides the following controls:
 
-* Training starten / Morse-Taste
-* Pause / Fortsetzen
-* Stoppen
-* Lösung anzeigen
+* Start training / Morse key
+* Pause / Resume
+* Stop
+* Show solution
 
-## Tastaturkürzel
+## Keyboard Shortcuts
 
 ```text
-Space      = Training starten / Morse-Taste
-Ctrl+Space = Pause / Fortsetzen
-Ctrl+X     = Stoppen
+Space      = Start training / Morse key
+Ctrl+Space = Pause / Resume
+Ctrl+X     = Stop
 ```
 
-Die `Space`-Taste startet das Training und dient während eines aktiven CWType-Trainings als Morse-Taste.
+The `Space` key starts training and functions as the Morse key during active CWType training.
 
-`Ctrl+Space` pausiert das aktuelle Training oder setzt es fort.
+`Ctrl+Space` pauses or resumes the current training session.
 
-`Ctrl+X` beendet das aktuelle Training.
+`Ctrl+X` stops the current training session.
 
-Die `Space`-Taste wird von CWType nur verarbeitet, wenn kein interaktives Formularelement den Fokus besitzt.
+The `Space` key is only handled by CWType when no interactive form element has focus.
 
-Wenn ein `INPUT`, `SELECT` oder `BUTTON`-Element den Fokus besitzt, behält die `Space`-Taste ihr normales Browser- bzw. Steuerelementverhalten.
+When an `INPUT`, `SELECT`, or `BUTTON` element has focus, the `Space` key retains its normal browser/control behavior.
 
-## Steuerung
+## Controls
 
 ### Start
 
-Startet eine neue Trainingseinheit mit einer neu erzeugten zufälligen Sequenz.
+Starts a new training session with a newly generated random sequence.
 
 ### Pause
 
-Pausiert die aktuelle Trainingseinheit.
+Pauses the current training session.
 
-### Fortsetzen
+### Resume
 
-Setzt eine pausierte Trainingseinheit fort.
+Resumes a paused training session.
 
 ### Stop
 
-Beendet die aktuelle Trainingseinheit.
+Stops the current training session.
 
-### Lösung anzeigen
+### Show Solution
 
-Zeigt die tatsächliche Sequenz an, die während der Trainingseinheit übertragen wurde.
+Displays the actual sequence that was transmitted during the training session.
 
-Die Lösung wird während des laufenden Trainings nicht automatisch angezeigt.
+The solution is not shown automatically while the training is running.

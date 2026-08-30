@@ -149,9 +149,32 @@ function setStatus(text) {
   }
 }
 
+/*
+ * Jede Methode mit "source" ist automatisch eine CSV-Methode.
+ *
+ * Dadurch muss hier nicht mehr für jeden neuen CSV-Typ
+ * etwas ergänzt werden.
+ *
+ * Beispiel:
+ *
+ *   {
+ *     "id": "abbreviations",
+ *     "source": "abbreviations.csv",
+ *     "type": "abbreviations"
+ *   }
+ *
+ *   {
+ *     "id": "q-groups",
+ *     "source": "q-groups.csv",
+ *     "type": "q-groups"
+ *   }
+ *
+ * Beide funktionieren automatisch.
+ */
 function isAbbreviationMethod() {
   return (
-    currentMethod?.type === "abbreviations" || currentMethod?.type === "custom"
+    typeof currentMethod?.source === "string" ||
+    currentMethod?.type === "custom"
   );
 }
 
@@ -183,6 +206,34 @@ function isGenerationActive(generation) {
 /* ============================================================
    CSV
    ============================================================ */
+
+/*
+ * CSV-Dateien haben immer zwei Spalten.
+ *
+ * Spalte 1 = Trainingsinhalt
+ * Spalte 2 = Information
+ *
+ * Nur Spalte 1 wird für das Training verwendet.
+ *
+ * Beispiel:
+ *
+ * abbreviation,meaning
+ * QRG,Frequenz
+ * QRL,besetzt
+ * QRM,Störung
+ *
+ * Intern:
+ *
+ * [
+ *   { abbreviation: "QRG", meaning: "Frequenz" },
+ *   { abbreviation: "QRL", meaning: "besetzt" },
+ *   { abbreviation: "QRM", meaning: "Störung" }
+ * ]
+ *
+ * Die bestehende Bezeichnung abbreviation/meaning
+ * bleibt erhalten, damit der restliche Code unverändert
+ * funktionieren kann.
+ */
 
 function parseCSVLine(line) {
   const values = [];
@@ -227,30 +278,31 @@ function parseCSV(text) {
     throw new Error("The CSV file contains no data.");
   }
 
-  const header = parseCSVLine(lines[0]).map((value) => value.toLowerCase());
-
-  const abbreviationIndex = header.indexOf("abbreviation");
-  const meaningIndex = header.indexOf("meaning");
-
-  if (abbreviationIndex === -1 || meaningIndex === -1) {
-    throw new Error('CSV header must contain "abbreviation,meaning".');
-  }
-
   const result = [];
-  const requiredIndex = Math.max(abbreviationIndex, meaningIndex);
 
+  /*
+   * Erste Zeile ist die Kopfzeile.
+   * Danach wird ausschließlich die erste Spalte
+   * als Trainingsinhalt verwendet.
+   *
+   * Die zweite Spalte wird lediglich als Information
+   * gespeichert.
+   */
   for (let i = 1; i < lines.length; i++) {
     const values = parseCSVLine(lines[i]);
 
-    if (values.length <= requiredIndex) {
+    if (values.length < 1) {
       continue;
     }
 
-    const abbreviation = values[abbreviationIndex].trim();
-    const meaning = values[meaningIndex].trim();
+    const abbreviation = values[0]?.trim() || "";
+    const meaning = values[1]?.trim() || "";
 
     if (abbreviation) {
-      result.push({ abbreviation, meaning });
+      result.push({
+        abbreviation,
+        meaning,
+      });
     }
   }
 
@@ -308,7 +360,11 @@ async function addCustomFile(file) {
 
   const id = "custom-" + Date.now() + "-" + Math.random().toString(36).slice(2);
 
-  customFiles.push({ id, name, data });
+  customFiles.push({
+    id,
+    name,
+    data,
+  });
 
   renderCustomFiles();
   rebuildMethods(id);
@@ -396,7 +452,7 @@ async function loadAbbreviations() {
   }
 
   if (typeof currentMethod.source !== "string") {
-    throw new Error("No abbreviation CSV file specified.");
+    throw new Error("No CSV file specified.");
   }
 
   const response = await fetch("text/" + currentMethod.source, {
@@ -431,6 +487,7 @@ async function selectMethod() {
 
     populateLessons();
     updateCharacters();
+
     setStatus("Error loading training set: " + error.message);
 
     return;
@@ -515,6 +572,7 @@ function updateCharacters() {
 
 function getGroupSettings() {
   let groups = parseInt(groupsInput.value, 10);
+
   let groupSize = parseInt(groupSizeInput.value, 10);
 
   if (!Number.isFinite(groups) || groups < 1) {
@@ -525,7 +583,10 @@ function getGroupSettings() {
     groupSize = 5;
   }
 
-  return { groups, groupSize };
+  return {
+    groups,
+    groupSize,
+  };
 }
 
 function dotMilliseconds() {
@@ -570,11 +631,13 @@ function createCharacterSequence() {
   }
 
   const { groups, groupSize } = getGroupSettings();
+
   const sequence = [];
 
   for (let group = 0; group < groups; group++) {
     for (let i = 0; i < groupSize; i++) {
       const index = Math.floor(Math.random() * available.length);
+
       sequence.push(available[index]);
     }
 
@@ -594,11 +657,13 @@ function createAbbreviationSequence() {
   }
 
   const { groups, groupSize } = getGroupSettings();
+
   const sequence = [];
 
   for (let group = 0; group < groups; group++) {
     for (let i = 0; i < groupSize; i++) {
       const index = Math.floor(Math.random() * available.length);
+
       sequence.push(available[index]);
     }
 
@@ -679,6 +744,7 @@ function playTone(duration, finished, generation) {
   if (paused) {
     timer = setTimeout(() => {
       timer = null;
+
       playTone(duration, finished, generation);
     }, 50);
 
@@ -689,8 +755,11 @@ function playTone(duration, finished, generation) {
     INCWAudio.tone(getToneFrequency(), duration / 1000, getVolume());
   } catch (error) {
     console.error(error);
+
     stopTraining();
+
     setStatus("Audio error: " + error.message);
+
     return;
   }
 
@@ -715,6 +784,7 @@ function waitUnits(units, finished, generation) {
   if (paused) {
     timer = setTimeout(() => {
       timer = null;
+
       waitUnits(units, finished, generation);
     }, 50);
 
@@ -747,6 +817,7 @@ function sendCode(
   if (paused) {
     timer = setTimeout(() => {
       timer = null;
+
       sendCode(code, finished, trailingGap, generation);
     }, 50);
 
@@ -776,10 +847,12 @@ function sendCode(
 
     if (index >= code.length) {
       waitUnits(trailingGap, finished, generation);
+
       return;
     }
 
     const symbol = code[index++];
+
     const duration = dotMilliseconds() * (symbol === "-" ? CW_DAH : CW_DIT);
 
     playTone(
@@ -812,6 +885,7 @@ function sendMorse(
 
   if (!code) {
     console.warn("No Morse code for:", character);
+
     finished();
     return;
   }
@@ -853,6 +927,7 @@ function sendAbbreviation(
     }
 
     const character = characters[index++];
+
     const gap = index >= characters.length ? CW_WORD_GAP : CW_CHARACTER_GAP;
 
     sendMorse(character, nextCharacter, gap, generation);
@@ -905,10 +980,12 @@ function sendNextCharacter(generation = trainingGeneration) {
       () => sendNextCharacter(generation),
       generation,
     );
+
     return;
   }
 
   playedSequence.push(character);
+
   updateProgress();
 
   sendMorse(
@@ -933,12 +1010,23 @@ function sendNextAbbreviation(generation = trainingGeneration) {
 
   if (entry === null) {
     sendNextAbbreviation(generation);
+
     return;
   }
 
   playedSequence.push(entry);
+
   updateProgress();
 
+  /*
+   * WICHTIG:
+   *
+   * Nur die erste CSV-Spalte wird
+   * als Morse-Inhalt verwendet.
+   *
+   * Die zweite Spalte (meaning)
+   * wird NICHT abgespielt.
+   */
   sendAbbreviation(
     entry.abbreviation,
     () => sendNextAbbreviation(generation),
@@ -968,6 +1056,7 @@ function buildSolutionText() {
   }
 
   const { groupSize } = getGroupSettings();
+
   const groups = [];
 
   for (let i = 0; i < playedSequence.length; i += groupSize) {
@@ -979,6 +1068,7 @@ function buildSolutionText() {
 
 function updateProgress() {
   const total = countTrainingItems();
+
   const current = playedSequence.length;
 
   counterElement.textContent = `${current} / ${total}`;
@@ -992,6 +1082,7 @@ function showSolution() {
   }
 
   solutionElement.textContent = buildSolutionText();
+
   solutionElement.hidden = !solutionElement.hidden;
 }
 
@@ -1002,6 +1093,7 @@ function showSolution() {
 async function startTraining() {
   if (!currentMethod) {
     setStatus("No training set selected.");
+
     return;
   }
 
@@ -1009,6 +1101,7 @@ async function startTraining() {
 
   if (!trainingSequence.length) {
     setStatus("No training data available.");
+
     return;
   }
 
@@ -1016,7 +1109,9 @@ async function startTraining() {
     await startAudio();
   } catch (error) {
     console.error(error);
+
     setStatus(error.message);
+
     return;
   }
 
@@ -1033,15 +1128,19 @@ async function startTraining() {
   paused = false;
 
   solutionElement.textContent = "";
+
   solutionElement.hidden = true;
+
   solutionButton.disabled = true;
 
   progressBar.style.width = "0%";
+
   counterElement.textContent = `0 / ${countTrainingItems()}`;
 
   startButton.disabled = true;
   pauseButton.disabled = false;
   stopButton.disabled = false;
+
   pauseButton.textContent = "⏸ Pause";
 
   setStatus("VVV");
@@ -1059,6 +1158,7 @@ async function startTraining() {
       }
 
       setStatus("Training");
+
       sendNext(generation);
     }, generation);
   }, generation);
@@ -1071,9 +1171,11 @@ function togglePause() {
 
   if (!paused) {
     paused = true;
+
     clearTimer();
 
     pauseButton.textContent = "▶ Resume";
+
     setStatus("Paused");
 
     return;
@@ -1082,6 +1184,7 @@ function togglePause() {
   paused = false;
 
   pauseButton.textContent = "⏸ Pause";
+
   setStatus("Training");
 
   if (timer === null) {
@@ -1099,11 +1202,13 @@ function stopTraining() {
   stopAudio();
 
   solutionElement.textContent = buildSolutionText();
+
   solutionElement.hidden = true;
 
   startButton.disabled = false;
   pauseButton.disabled = true;
   stopButton.disabled = true;
+
   pauseButton.textContent = "⏸ Pause";
 
   setStatus("Stopped");
@@ -1134,6 +1239,7 @@ function finishTraining(generation = trainingGeneration) {
       startButton.disabled = false;
       pauseButton.disabled = true;
       stopButton.disabled = true;
+
       pauseButton.textContent = "⏸ Pause";
 
       progressBar.style.width = "100%";
@@ -1143,6 +1249,7 @@ function finishTraining(generation = trainingGeneration) {
       counterElement.textContent = `${total} / ${total}`;
 
       solutionElement.textContent = buildSolutionText();
+
       solutionElement.hidden = true;
 
       setStatus("Training finished");
@@ -1179,6 +1286,7 @@ function resetTraining() {
   solutionElement.textContent = "";
 
   progressBar.style.width = "0%";
+
   counterElement.textContent = "0 / 0";
 }
 
@@ -1207,9 +1315,11 @@ async function loadIndex() {
     methods = data.methods;
 
     rebuildMethods();
+
     setStatus("Ready");
   } catch (error) {
     console.error(error);
+
     setStatus("Error loading: " + error.message);
   }
 }
@@ -1227,9 +1337,11 @@ customFileInput?.addEventListener("change", async () => {
 
   try {
     setStatus("Loading " + file.name + " ...");
+
     await addCustomFile(file);
   } catch (error) {
     console.error(error);
+
     setStatus("Error loading CSV: " + error.message);
   }
 
@@ -1237,11 +1349,15 @@ customFileInput?.addEventListener("change", async () => {
 });
 
 methodSelect?.addEventListener("change", selectMethod);
+
 lessonSelect?.addEventListener("change", selectLesson);
 
 startButton?.addEventListener("click", startTraining);
+
 pauseButton?.addEventListener("click", togglePause);
+
 stopButton?.addEventListener("click", stopTraining);
+
 solutionButton?.addEventListener("click", showSolution);
 
 /* ============================================================

@@ -2,7 +2,7 @@
 
 (() => {
   /* =========================================================
-     CW TYPE
+     DOM
      ========================================================= */
 
   const methodSelect = document.getElementById("method");
@@ -40,75 +40,42 @@
 
   let abbreviationData = [];
 
+  /* =========================================================
+     TRAINING
+     ========================================================= */
+
   let currentGroups = [];
   let currentTiming = [];
-  let expectedGroups = [];
 
-  let typedGroups = [];
-  let currentTypedGroup = 0;
-  let currentTypedIndex = 0;
+  let expectedCharacters = [];
+  let typedSequence = [];
+
+  let processedCount = 0;
+  let currentExpectedIndex = 0;
 
   let morseInput = "";
 
   /* =========================================================
-     AUDIO
+     STATE
      ========================================================= */
 
-  function getToneFrequency() {
-    const value = Number(toneInput?.value);
+  let running = false;
+  let paused = false;
 
-    if (!Number.isFinite(value)) {
-      return 600;
-    }
+  let animationFrame = null;
 
-    return Math.max(100, Math.min(2000, value));
-  }
+  let startTime = 0;
+  let elapsed = 0;
+  let duration = 1;
 
-  function getVolume() {
-    const value = Number(volumeInput?.value);
+  let startX = 0;
+  let endX = 0;
 
-    if (!Number.isFinite(value)) {
-      return 30;
-    }
+  let characterTiming = [];
 
-    return Math.max(0, Math.min(100, value));
-  }
-
-  async function ensureAudio() {
-    try {
-      await INCWAudio.start();
-      return true;
-    } catch (error) {
-      console.error("CW audio could not be initialized:", error);
-      return false;
-    }
-  }
-
-  async function toneStart() {
-    const ready = await ensureAudio();
-
-    if (!ready) {
-      return;
-    }
-
-    INCWAudio.tone(
-      getToneFrequency(),
-      getDitMilliseconds() / 1000,
-      getVolume() / 100,
-    );
-  }
-
-  function toneStop() {
-    INCWAudio.stop();
-  }
-
-  function updateTone() {
-    // INCWAudio erzeugt jeden Ton mit der aktuell gewählten Frequenz.
-  }
-
-  function updateVolume() {
-    // Lautstärke wird beim nächsten Ton aus dem Eingabefeld gelesen.
-  }
+  let keyDown = false;
+  let keyDownStarted = 0;
+  let characterTimer = null;
 
   /* =========================================================
      MORSE
@@ -185,6 +152,38 @@
   const CW_ELEMENT_GAP = 1;
   const CW_CHARACTER_GAP = 3;
   const CW_WORD_GAP = 7;
+  const CW_WORD_GAP_EXTRA = CW_WORD_GAP - CW_CHARACTER_GAP;
+
+  const CW_BEGIN_PROSIGN = "-.-.-";
+
+  /* =========================================================
+     HELPERS
+     ========================================================= */
+
+  function isAbbreviationMethod() {
+    return (
+      typeof currentMethod?.source === "string" ||
+      currentMethod?.type === "custom"
+    );
+  }
+
+  function isCustomMethod() {
+    return currentMethod?.type === "custom";
+  }
+
+  function getAlphabet() {
+    return typeof currentMethod?.alphabet === "string"
+      ? Array.from(currentMethod.alphabet)
+      : [];
+  }
+
+  function getAvailableAbbreviations() {
+    return abbreviationData.slice(0, currentLesson);
+  }
+
+  /* =========================================================
+     SETTINGS
+     ========================================================= */
 
   function getWpm() {
     const value = Number(wpmInput?.value);
@@ -199,6 +198,102 @@
   function getDitMilliseconds() {
     return 1200 / getWpm();
   }
+
+  function getToneFrequency() {
+    const value = Number(toneInput?.value);
+
+    if (!Number.isFinite(value)) {
+      return 600;
+    }
+
+    return Math.max(100, Math.min(2000, value));
+  }
+
+  function getVolume() {
+    const value = Number(volumeInput?.value);
+
+    if (!Number.isFinite(value)) {
+      return 30;
+    }
+
+    return Math.max(0, Math.min(100, value)) / 100;
+  }
+
+  function getGroupSettings() {
+    let groups = parseInt(groupsInput?.value, 10);
+    let groupSize = parseInt(groupSizeInput?.value, 10);
+
+    if (!Number.isFinite(groups) || groups < 1) {
+      groups = 1;
+    }
+
+    if (!Number.isFinite(groupSize) || groupSize < 1) {
+      groupSize = 5;
+    }
+
+    return {
+      groups,
+      groupSize,
+    };
+  }
+
+  /* =========================================================
+     AUDIO
+     ========================================================= */
+
+  async function ensureAudio() {
+    if (typeof INCWAudio === "undefined") {
+      return false;
+    }
+
+    if (typeof INCWAudio.start !== "function") {
+      return false;
+    }
+
+    try {
+      const audio = await INCWAudio.start();
+
+      return !!audio && audio.state === "running";
+    } catch (error) {
+      console.error("CW audio could not be initialized:", error);
+      return false;
+    }
+  }
+
+  async function toneStart() {
+    const ready = await ensureAudio();
+
+    if (!ready) {
+      return;
+    }
+
+    try {
+      INCWAudio.tone(
+        getToneFrequency(),
+        getDitMilliseconds() / 1000,
+        getVolume(),
+      );
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  function toneStop() {
+    if (
+      typeof INCWAudio !== "undefined" &&
+      typeof INCWAudio.stop === "function"
+    ) {
+      try {
+        INCWAudio.stop();
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
+
+  /* =========================================================
+     MORSE CALCULATION
+     ========================================================= */
 
   function morseUnits(character) {
     const code = MORSE[String(character).toUpperCase()];
@@ -252,361 +347,20 @@
   }
 
   function kaUnits() {
-    const code = "-.-.-";
-
     let units = 0;
 
-    for (let i = 0; i < code.length; i++) {
-      units += code[i] === "-" ? CW_DAH : CW_DIT;
-
-      if (i < code.length - 1) {
-        units += CW_ELEMENT_GAP;
-      }
+    for (const symbol of CW_BEGIN_PROSIGN) {
+      units += symbol === "-" ? CW_DAH : CW_DIT;
     }
+
+    units += (CW_BEGIN_PROSIGN.length - 1) * CW_ELEMENT_GAP;
 
     return units + CW_WORD_GAP;
   }
 
-  function buildTimingSequence(groups) {
-    const sequence = [
-      {
-        text: "VVV",
-        type: "vvv",
-        units: vvvUnits(),
-      },
-      {
-        text: "KA",
-        type: "ka",
-        units: kaUnits(),
-      },
-    ];
-
-    groups.forEach((group, groupIndex) => {
-      group.forEach((item, itemIndex) => {
-        sequence.push({
-          text: String(item),
-          type: "training",
-          groupIndex,
-          itemIndex,
-          units: textUnits(item),
-        });
-      });
-    });
-
-    sequence.push({
-      text: "+",
-      type: "plus",
-      units: morseUnits("+"),
-    });
-
-    return sequence;
-  }
-
-  function getTotalUnits() {
-    return currentTiming.reduce((total, item) => total + item.units, 0);
-  }
-
-  function getDuration() {
-    return Math.max(1, getTotalUnits() * getDitMilliseconds());
-  }
-
-  /* =========================================================
-     KEY INPUT
-     ========================================================= */
-
-  let keyDown = false;
-  let keyDownStarted = 0;
-  let characterTimer = null;
-
-  function addMorseElement(element) {
-    if (element === "." || element === "-") {
-      morseInput += element;
-    }
-  }
-
-  function finishMorseCharacter() {
-    if (!morseInput) {
-      return;
-    }
-
-    const character = MORSE_REVERSE[morseInput] || "?";
-
-    addTypedCharacter(character);
-
-    morseInput = "";
-  }
-
-  function finishKeyStroke() {
-    if (!keyDownStarted) {
-      return;
-    }
-
-    const durationMs = performance.now() - keyDownStarted;
-
-    keyDownStarted = 0;
-    keyDown = false;
-
-    toneStop();
-
-    const element = durationMs >= getDitMilliseconds() * 2 ? "-" : ".";
-
-    addMorseElement(element);
-  }
-
-  function scheduleCharacterFinish() {
-    if (characterTimer !== null) {
-      clearTimeout(characterTimer);
-    }
-
-    characterTimer = window.setTimeout(() => {
-      characterTimer = null;
-      finishMorseCharacter();
-    }, getDitMilliseconds() * 3);
-  }
-
-  async function handleSpaceDown(event) {
-    if (event.code !== "Space") {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (event.repeat) {
-      return;
-    }
-
-    if (event.ctrlKey) {
-      if (keyDown) {
-        finishKeyStroke();
-      }
-
-      togglePause();
-      return;
-    }
-
-    if (!running) {
-      await start();
-    }
-
-    if (!running || paused || keyDown) {
-      return;
-    }
-
-    if (characterTimer !== null) {
-      clearTimeout(characterTimer);
-      characterTimer = null;
-    }
-
-    keyDown = true;
-    keyDownStarted = performance.now();
-
-    await toneStart();
-  }
-
-  function handleSpaceUp(event) {
-    if (event.code !== "Space") {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (event.ctrlKey || !keyDown) {
-      return;
-    }
-
-    finishKeyStroke();
-    scheduleCharacterFinish();
-  }
-
-  function handleControlX(event) {
-    if (!event.ctrlKey || event.key.toLowerCase() !== "x") {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (keyDown) {
-      finishKeyStroke();
-    }
-
-    stop();
-    showSolution();
-  }
-
-  function handleWindowBlur() {
-    if (keyDown) {
-      finishKeyStroke();
-    } else {
-      toneStop();
-    }
-  }
-
-  window.addEventListener("keydown", handleSpaceDown);
-  window.addEventListener("keyup", handleSpaceUp);
-  window.addEventListener("keydown", handleControlX);
-  window.addEventListener("blur", handleWindowBlur);
-
-  /* =========================================================
-     SOLUTION
-     ========================================================= */
-
-  function resetSolutionData() {
-    typedGroups = [];
-    currentTypedGroup = 0;
-    currentTypedIndex = 0;
-    morseInput = "";
-
-    if (characterTimer !== null) {
-      clearTimeout(characterTimer);
-      characterTimer = null;
-    }
-
-    if (showSolutionButton) {
-      showSolutionButton.dataset.active = "false";
-    }
-
-    if (solutionElement) {
-      solutionElement.hidden = true;
-    }
-
-    updateSolution();
-  }
-
-  function addTypedCharacter(character) {
-    if (currentTypedGroup >= expectedGroups.length) {
-      return;
-    }
-
-    const expectedGroup = expectedGroups[currentTypedGroup];
-
-    if (currentTypedIndex >= expectedGroup.length) {
-      return;
-    }
-
-    if (!typedGroups[currentTypedGroup]) {
-      typedGroups[currentTypedGroup] = [];
-    }
-
-    typedGroups[currentTypedGroup].push(character);
-
-    currentTypedIndex++;
-
-    if (currentTypedIndex >= expectedGroup.length) {
-      currentTypedGroup++;
-      currentTypedIndex = 0;
-    }
-
-    updateSolution();
-  }
-
-  function createSolutionGroup(typedGroup, expectedGroup) {
-    const groupElement = document.createElement("span");
-
-    groupElement.className = "cwtype-solution-group";
-
-    typedGroup.forEach((typedCharacter, index) => {
-      const expectedCharacter = expectedGroup[index];
-
-      const characterElement = document.createElement("span");
-
-      characterElement.className = "cwtype-solution-character";
-      characterElement.textContent = typedCharacter;
-
-      if (
-        String(typedCharacter).toUpperCase() ===
-        String(expectedCharacter).toUpperCase()
-      ) {
-        characterElement.classList.add("correct");
-      } else {
-        characterElement.classList.add("wrong");
-        characterElement.title = "Expected: " + expectedCharacter;
-      }
-
-      groupElement.appendChild(characterElement);
-
-      if (index < typedGroup.length - 1) {
-        const gap = document.createElement("span");
-
-        gap.className = "cwtype-solution-character-gap";
-        gap.textContent = " ";
-
-        groupElement.appendChild(gap);
-      }
-    });
-
-    return groupElement;
-  }
-
-  function updateSolution() {
-    if (!solutionElement) {
-      return;
-    }
-
-    solutionElement.replaceChildren();
-
-    if (showSolutionButton?.dataset.active !== "true") {
-      solutionElement.hidden = true;
-      return;
-    }
-
-    solutionElement.hidden = false;
-
-    typedGroups.forEach((typedGroup, groupIndex) => {
-      const expectedGroup = expectedGroups[groupIndex];
-
-      if (!expectedGroup || !typedGroup?.length) {
-        return;
-      }
-
-      solutionElement.appendChild(
-        createSolutionGroup(typedGroup, expectedGroup),
-      );
-
-      if (groupIndex < typedGroups.length - 1) {
-        const groupGap = document.createElement("span");
-
-        groupGap.className = "cwtype-solution-group-gap";
-        groupGap.textContent = "   ";
-
-        solutionElement.appendChild(groupGap);
-      }
-    });
-  }
-
-  function showSolution() {
-    if (!solutionElement) {
-      return;
-    }
-
-    if (showSolutionButton) {
-      showSolutionButton.dataset.active = "true";
-    }
-
-    solutionElement.hidden = false;
-    updateSolution();
-  }
-
-  function toggleSolution() {
-    if (!solutionElement) {
-      return;
-    }
-
-    const active = showSolutionButton?.dataset.active === "true";
-
-    if (active) {
-      if (showSolutionButton) {
-        showSolutionButton.dataset.active = "false";
-      }
-
-      solutionElement.hidden = true;
-      return;
-    }
-
-    showSolution();
-  }
-
   /* =========================================================
      CSV
+     IDENTISCHES VERHALTEN WIE CWTRAINER
      ========================================================= */
 
   function parseCSVLine(line) {
@@ -652,31 +406,24 @@
       throw new Error("The CSV file contains no data.");
     }
 
-    const header = parseCSVLine(lines[0]).map((value) => value.toLowerCase());
-
-    const abbreviationIndex = header.indexOf("abbreviation");
-    const meaningIndex = header.indexOf("meaning");
-
-    if (abbreviationIndex === -1 || meaningIndex === -1) {
-      throw new Error('CSV header must contain "abbreviation,meaning".');
-    }
-
     const result = [];
 
     for (let i = 1; i < lines.length; i++) {
       const values = parseCSVLine(lines[i]);
 
-      const abbreviation = values[abbreviationIndex]?.trim() || "";
-      const meaning = values[meaningIndex]?.trim() || "";
-
-      if (!abbreviation) {
+      if (values.length < 1) {
         continue;
       }
 
-      result.push({
-        abbreviation,
-        meaning,
-      });
+      const abbreviation = values[0]?.trim() || "";
+      const meaning = values[1]?.trim() || "";
+
+      if (abbreviation) {
+        result.push({
+          abbreviation,
+          meaning,
+        });
+      }
     }
 
     if (!result.length) {
@@ -687,73 +434,21 @@
   }
 
   /* =========================================================
-     METHODS
+     CUSTOM FILES
      ========================================================= */
 
-  function isAbbreviationMethod() {
-    return (
-      currentMethod &&
-      (currentMethod.type === "abbreviations" ||
-        currentMethod.type === "custom")
-    );
-  }
-
-  function isCustomMethod() {
-    return currentMethod?.type === "custom";
+  function createCustomMethod(file) {
+    return {
+      id: file.id,
+      name: file.name,
+      type: "custom",
+      customFileId: file.id,
+    };
   }
 
   function getAllMethods() {
-    return [
-      ...methods,
-      ...customFiles.map((file) => ({
-        id: file.id,
-        name: file.name,
-        type: "custom",
-        customFileId: file.id,
-      })),
-    ];
+    return [...methods, ...customFiles.map(createCustomMethod)];
   }
-
-  function rebuildMethods(selectId = null) {
-    if (!methodSelect) {
-      return;
-    }
-
-    const previousId = selectId || currentMethod?.id || null;
-    const allMethods = getAllMethods();
-
-    methodSelect.replaceChildren();
-
-    allMethods.forEach((method) => {
-      if (!method?.id) {
-        return;
-      }
-
-      const option = document.createElement("option");
-
-      option.value = method.id;
-      option.textContent = method.name || method.id;
-
-      methodSelect.appendChild(option);
-    });
-
-    if (!allMethods.length) {
-      currentMethod = null;
-      abbreviationData = [];
-      populateLessons();
-      return;
-    }
-
-    const exists = allMethods.some((method) => method.id === previousId);
-
-    methodSelect.value = exists ? previousId : allMethods[0].id;
-
-    selectMethod();
-  }
-
-  /* =========================================================
-     CUSTOM FILES
-     ========================================================= */
 
   function renderCustomFiles() {
     if (!customFilesElement) {
@@ -762,26 +457,32 @@
 
     customFilesElement.replaceChildren();
 
-    customFiles.forEach((file) => {
+    for (const file of customFiles) {
       const row = document.createElement("div");
+
       row.className = "custom-file";
 
       const name = document.createElement("span");
       name.textContent = file.name;
 
       const removeButton = document.createElement("button");
+
       removeButton.type = "button";
       removeButton.textContent = "Remove";
 
-      removeButton.addEventListener("click", () => removeCustomFile(file.id));
+      removeButton.addEventListener("click", () => {
+        removeCustomFile(file.id);
+      });
 
       row.append(name, removeButton);
+
       customFilesElement.appendChild(row);
-    });
+    }
   }
 
   async function addCustomFile(file) {
     const data = parseCSV(await file.text());
+
     const name = file.name.replace(/\.csv$/i, "");
 
     const id =
@@ -798,11 +499,17 @@
   }
 
   function removeCustomFile(id) {
+    if (running) {
+      stop();
+    }
+
+    const selected = currentMethod?.customFileId === id;
+
     customFiles = customFiles.filter((file) => file.id !== id);
 
     renderCustomFiles();
 
-    if (currentMethod?.customFileId === id) {
+    if (selected) {
       currentMethod = null;
     }
 
@@ -810,7 +517,7 @@
   }
 
   /* =========================================================
-     ABBREVIATIONS
+     METHODS
      ========================================================= */
 
   async function loadAbbreviations() {
@@ -830,11 +537,12 @@
       }
 
       abbreviationData = file.data.slice();
+
       return;
     }
 
     if (typeof currentMethod.source !== "string") {
-      throw new Error("No abbreviation CSV file specified.");
+      throw new Error("No CSV file specified.");
     }
 
     const response = await fetch("text/" + currentMethod.source, {
@@ -848,17 +556,50 @@
     abbreviationData = parseCSV(await response.text());
   }
 
+  function rebuildMethods(selectId = null) {
+    if (!methodSelect) {
+      return;
+    }
+
+    const previousId = selectId || currentMethod?.id || null;
+
+    const allMethods = getAllMethods();
+
+    methodSelect.replaceChildren();
+
+    for (const method of allMethods) {
+      if (!method?.id) {
+        continue;
+      }
+
+      const option = document.createElement("option");
+
+      option.value = method.id;
+      option.textContent = method.name || method.id;
+
+      methodSelect.appendChild(option);
+    }
+
+    if (!allMethods.length) {
+      currentMethod = null;
+      abbreviationData = [];
+
+      populateLessons();
+      rebuild();
+
+      return;
+    }
+
+    const exists = allMethods.some((method) => method.id === previousId);
+
+    methodSelect.value = exists ? previousId : allMethods[0].id;
+
+    selectMethod();
+  }
+
   /* =========================================================
      LESSONS
      ========================================================= */
-
-  function getAlphabet() {
-    if (typeof currentMethod?.alphabet !== "string") {
-      return [];
-    }
-
-    return Array.from(currentMethod.alphabet);
-  }
 
   function getLessonCount() {
     return isAbbreviationMethod()
@@ -873,9 +614,7 @@
 
     lessonSelect.replaceChildren();
 
-    const count = getLessonCount();
-
-    for (let i = 1; i <= count; i++) {
+    for (let i = 1; i <= getLessonCount(); i++) {
       const option = document.createElement("option");
 
       option.value = String(i);
@@ -884,16 +623,16 @@
       lessonSelect.appendChild(option);
     }
 
-    if (count > 0) {
-      lessonSelect.value = String(Math.min(currentLesson, count));
+    if (lessonSelect.options.length) {
+      lessonSelect.value = String(
+        Math.min(currentLesson, lessonSelect.options.length),
+      );
     }
   }
 
   function getCurrentLessonValues() {
     if (isAbbreviationMethod()) {
-      return abbreviationData
-        .slice(0, currentLesson)
-        .map((entry) => entry.abbreviation);
+      return getAvailableAbbreviations().map((entry) => entry.abbreviation);
     }
 
     return getAlphabet().slice(0, currentLesson);
@@ -903,24 +642,6 @@
      TRAINING GROUPS
      ========================================================= */
 
-  function getGroupSettings() {
-    let groups = parseInt(groupsInput?.value, 10);
-    let groupSize = parseInt(groupSizeInput?.value, 10);
-
-    if (!Number.isFinite(groups) || groups < 1) {
-      groups = 1;
-    }
-
-    if (!Number.isFinite(groupSize) || groupSize < 1) {
-      groupSize = 5;
-    }
-
-    return {
-      groups,
-      groupSize,
-    };
-  }
-
   function createTrainingGroups() {
     const available = getCurrentLessonValues();
 
@@ -929,6 +650,7 @@
     }
 
     const { groups, groupSize } = getGroupSettings();
+
     const result = [];
 
     for (let groupIndex = 0; groupIndex < groups; groupIndex++) {
@@ -947,26 +669,651 @@
   }
 
   /* =========================================================
-     VISUAL GROUP
+     TIMING
+     ========================================================= */
+
+  function buildTimingSequence(groups) {
+    const sequence = [];
+
+    sequence.push({
+      text: "VVV",
+      type: "vvv",
+      units: vvvUnits(),
+    });
+
+    sequence.push({
+      text: "KA",
+      type: "ka",
+      units: kaUnits(),
+    });
+
+    groups.forEach((group, groupIndex) => {
+      group.forEach((item, itemIndex) => {
+        sequence.push({
+          text: String(item),
+          type: "training",
+          groupIndex,
+          itemIndex,
+          units: textUnits(item),
+        });
+      });
+    });
+
+    sequence.push({
+      text: "+",
+      type: "plus",
+      units: morseUnits("+"),
+    });
+
+    return sequence;
+  }
+
+  function getTotalUnits() {
+    return currentTiming.reduce((total, item) => total + item.units, 0);
+  }
+
+  function getDuration() {
+    return Math.max(1, getTotalUnits() * getDitMilliseconds());
+  }
+
+  /* =========================================================
+     EXPECTED SEQUENCE
+     ========================================================= */
+
+  function buildExpectedSequence() {
+    expectedCharacters = [];
+
+    expectedCharacters.push("V");
+    expectedCharacters.push("V");
+    expectedCharacters.push("V");
+
+    expectedCharacters.push("K");
+    expectedCharacters.push("A");
+
+    currentGroups.forEach((group) => {
+      group.forEach((item) => {
+        for (const character of Array.from(String(item))) {
+          expectedCharacters.push(character);
+        }
+      });
+    });
+
+    typedSequence = expectedCharacters.map(() => null);
+
+    processedCount = 0;
+    currentExpectedIndex = 0;
+  }
+
+  /* =========================================================
+     CHARACTER TIMING
+     ========================================================= */
+
+  function buildCharacterTiming() {
+    const result = [];
+
+    let currentUnits = 0;
+
+    const vvv = ["V", "V", "V"];
+
+    vvv.forEach((character, index) => {
+      const units = morseUnits(character);
+
+      result.push({
+        index,
+        character,
+        startUnits: currentUnits,
+        endUnits: currentUnits + units,
+      });
+
+      currentUnits += units;
+
+      currentUnits += index < vvv.length - 1 ? CW_CHARACTER_GAP : CW_WORD_GAP;
+    });
+
+    const kaStart = currentUnits;
+
+    const kUnits = morseUnits("K");
+    const aUnits = morseUnits("A");
+
+    result.push({
+      index: 3,
+      character: "K",
+      startUnits: kaStart,
+      endUnits: kaStart + kUnits,
+    });
+
+    result.push({
+      index: 4,
+      character: "A",
+      startUnits: kaStart + kUnits,
+      endUnits: kaStart + kUnits + aUnits,
+    });
+
+    currentUnits += kUnits + aUnits + CW_WORD_GAP;
+
+    let globalIndex = 5;
+
+    currentGroups.forEach((group) => {
+      group.forEach((item) => {
+        const characters = Array.from(String(item));
+
+        characters.forEach((character, index) => {
+          const units = morseUnits(character);
+
+          result.push({
+            index: globalIndex,
+            character,
+            startUnits: currentUnits,
+            endUnits: currentUnits + units,
+          });
+
+          globalIndex++;
+
+          currentUnits += units;
+
+          currentUnits +=
+            index < characters.length - 1 ? CW_CHARACTER_GAP : CW_WORD_GAP;
+        });
+      });
+    });
+
+    return result;
+  }
+
+  /* =========================================================
+     TIME / PROGRESS
+     ========================================================= */
+
+  function getElapsedUnits() {
+    const dit = getDitMilliseconds();
+
+    if (!Number.isFinite(dit) || dit <= 0) {
+      return 0;
+    }
+
+    return Math.max(0, elapsed / dit);
+  }
+
+  function getProcessedCountFromTime() {
+    if (!characterTiming.length) {
+      return 0;
+    }
+
+    const units = getElapsedUnits();
+
+    let count = 0;
+
+    for (const item of characterTiming) {
+      if (units >= item.endUnits) {
+        count = Math.max(count, item.index + 1);
+      }
+    }
+
+    return Math.min(count, expectedCharacters.length);
+  }
+
+  function updateProcessedCount() {
+    const calculated = getProcessedCountFromTime();
+
+    if (calculated > processedCount) {
+      processedCount = calculated;
+    }
+
+    if (currentExpectedIndex < processedCount) {
+      currentExpectedIndex = processedCount;
+    }
+
+    updateSolution();
+  }
+
+  function getCurrentTypingIndex() {
+    if (!characterTiming.length) {
+      return -1;
+    }
+
+    const units = getElapsedUnits();
+
+    for (const item of characterTiming) {
+      if (
+        units >= item.startUnits &&
+        units < item.endUnits &&
+        item.index < expectedCharacters.length
+      ) {
+        return item.index;
+      }
+    }
+
+    return -1;
+  }
+
+  /* =========================================================
+     KEYBOARD INPUT
+     ========================================================= */
+
+  function addMorseElement(element) {
+    if (element !== "." && element !== "-") {
+      return;
+    }
+
+    morseInput += element;
+  }
+
+  function finishMorseCharacter() {
+    if (!morseInput) {
+      return;
+    }
+
+    const character = MORSE_REVERSE[morseInput] || "?";
+
+    addTypedCharacter(character);
+
+    morseInput = "";
+  }
+
+  function finishKeyStroke() {
+    if (!keyDownStarted) {
+      return;
+    }
+
+    const durationMs = performance.now() - keyDownStarted;
+
+    keyDownStarted = 0;
+    keyDown = false;
+
+    toneStop();
+
+    const element = durationMs >= getDitMilliseconds() * 2 ? "-" : ".";
+
+    addMorseElement(element);
+  }
+
+  function scheduleCharacterFinish() {
+    if (characterTimer !== null) {
+      clearTimeout(characterTimer);
+    }
+
+    characterTimer = window.setTimeout(() => {
+      characterTimer = null;
+      finishMorseCharacter();
+    }, getDitMilliseconds() * 3);
+  }
+
+  function addTypedCharacter(character) {
+    if (!running || paused) {
+      return;
+    }
+
+    const index = getCurrentTypingIndex();
+
+    if (index < 0 || index >= expectedCharacters.length) {
+      return;
+    }
+
+    typedSequence[index] = String(character);
+
+    currentExpectedIndex = Math.max(currentExpectedIndex, index + 1);
+
+    updateSolution();
+  }
+
+  async function handleSpaceDown(event) {
+    if (event.code !== "Space") {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (event.repeat) {
+      return;
+    }
+
+    if (event.ctrlKey) {
+      if (keyDown) {
+        finishKeyStroke();
+      }
+
+      togglePause();
+
+      return;
+    }
+
+    if (!running) {
+      await start();
+    }
+
+    if (!running || paused || keyDown) {
+      return;
+    }
+
+    if (characterTimer !== null) {
+      clearTimeout(characterTimer);
+
+      characterTimer = null;
+    }
+
+    keyDown = true;
+    keyDownStarted = performance.now();
+
+    await toneStart();
+  }
+
+  function handleSpaceUp(event) {
+    if (event.code !== "Space") {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (event.ctrlKey || !keyDown) {
+      return;
+    }
+
+    finishKeyStroke();
+    scheduleCharacterFinish();
+  }
+
+  function handleControlX(event) {
+    if (!event.ctrlKey || event.key.toLowerCase() !== "x") {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (keyDown) {
+      finishKeyStroke();
+    }
+
+    finishMorseCharacter();
+    updateProcessedCount();
+
+    stop();
+    showSolution();
+  }
+
+  function handleWindowBlur() {
+    if (keyDown) {
+      finishKeyStroke();
+    } else {
+      toneStop();
+    }
+  }
+
+  window.addEventListener("keydown", handleSpaceDown);
+
+  window.addEventListener("keyup", handleSpaceUp);
+
+  window.addEventListener("keydown", handleControlX);
+
+  window.addEventListener("blur", handleWindowBlur);
+
+  /* =========================================================
+     SOLUTION
+     ========================================================= */
+
+  function ensureSolutionStyles() {
+    if (document.getElementById("cwtype-solution-runtime-style")) {
+      return;
+    }
+
+    const style = document.createElement("style");
+
+    style.id = "cwtype-solution-runtime-style";
+
+    style.textContent = `
+      .cwtype-solution {
+        white-space: nowrap;
+      }
+
+      .cwtype-solution-character {
+        display: inline-block;
+        min-width: 0.72em;
+        text-align: center;
+        line-height: 1.1;
+      }
+
+      .cwtype-solution-character.wrong,
+      .cwtype-solution-character.missing {
+        color: #c00;
+        text-decoration-line: underline;
+        text-decoration-color: #c00;
+        text-decoration-thickness: 2px;
+        text-underline-offset: 3px;
+      }
+
+      .cwtype-solution-character-gap {
+        display: inline-block;
+        width: 0.32em;
+      }
+
+      .cwtype-solution-group-gap {
+        display: inline-block;
+        width: 0.9em;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function createSolutionCharacter(expected, typed) {
+    const element = document.createElement("span");
+
+    element.className = "cwtype-solution-character";
+
+    if (typed === null || typed === undefined || typed === "") {
+      element.textContent = "_";
+      element.classList.add("missing");
+
+      element.title = "Nicht getastet – erwartet: " + expected;
+
+      return element;
+    }
+
+    element.textContent = String(typed);
+
+    if (String(typed).toUpperCase() === String(expected).toUpperCase()) {
+      return element;
+    }
+
+    element.classList.add("wrong");
+
+    element.title = "Erwartet: " + expected;
+
+    return element;
+  }
+
+  function createSolutionRange(startIndex, endIndex) {
+    const container = document.createElement("span");
+
+    for (let index = startIndex; index < endIndex; index++) {
+      container.appendChild(
+        createSolutionCharacter(
+          expectedCharacters[index],
+          typedSequence[index],
+        ),
+      );
+
+      if (index < endIndex - 1) {
+        const gap = document.createElement("span");
+
+        gap.className = "cwtype-solution-character-gap";
+
+        gap.textContent = " ";
+
+        container.appendChild(gap);
+      }
+    }
+
+    return container;
+  }
+
+  function getProcessedTrainingGroups() {
+    const result = [];
+
+    let globalIndex = 5;
+
+    currentGroups.forEach((group, groupIndex) => {
+      const groupStart = globalIndex;
+
+      let count = 0;
+
+      group.forEach((item) => {
+        count += Array.from(String(item)).length;
+      });
+
+      const groupEnd = groupStart + count;
+
+      if (processedCount > groupStart) {
+        result.push({
+          groupIndex,
+          startIndex: groupStart,
+          endIndex: Math.min(groupEnd, processedCount),
+        });
+      }
+
+      globalIndex = groupEnd;
+    });
+
+    return result;
+  }
+
+  function updateSolution() {
+    if (!solutionElement) {
+      return;
+    }
+
+    solutionElement.replaceChildren();
+
+    if (showSolutionButton?.dataset.active !== "true") {
+      solutionElement.hidden = true;
+      return;
+    }
+
+    solutionElement.hidden = false;
+
+    if (processedCount <= 0) {
+      return;
+    }
+
+    const fixedCount = Math.min(processedCount, 5);
+
+    if (fixedCount > 0) {
+      solutionElement.appendChild(createSolutionRange(0, fixedCount));
+    }
+
+    const groups = getProcessedTrainingGroups();
+
+    if (fixedCount > 0 && groups.length > 0) {
+      const gap = document.createElement("span");
+
+      gap.className = "cwtype-solution-group-gap";
+
+      gap.textContent = "   ";
+
+      solutionElement.appendChild(gap);
+    }
+
+    groups.forEach((group, index) => {
+      solutionElement.appendChild(
+        createSolutionRange(group.startIndex, group.endIndex),
+      );
+
+      if (index < groups.length - 1) {
+        const gap = document.createElement("span");
+
+        gap.className = "cwtype-solution-group-gap";
+
+        gap.textContent = "   ";
+
+        solutionElement.appendChild(gap);
+      }
+    });
+  }
+
+  function showSolution() {
+    if (!solutionElement) {
+      return;
+    }
+
+    if (showSolutionButton) {
+      showSolutionButton.dataset.active = "true";
+    }
+
+    updateSolution();
+  }
+
+  function toggleSolution() {
+    if (!solutionElement) {
+      return;
+    }
+
+    const active = showSolutionButton?.dataset.active === "true";
+
+    if (active) {
+      if (showSolutionButton) {
+        showSolutionButton.dataset.active = "false";
+      }
+
+      solutionElement.hidden = true;
+
+      return;
+    }
+
+    showSolution();
+  }
+
+  function resetSolution() {
+    morseInput = "";
+
+    if (characterTimer !== null) {
+      clearTimeout(characterTimer);
+
+      characterTimer = null;
+    }
+
+    processedCount = 0;
+    currentExpectedIndex = 0;
+
+    if (showSolutionButton) {
+      showSolutionButton.dataset.active = "false";
+    }
+
+    if (solutionElement) {
+      solutionElement.hidden = true;
+      solutionElement.replaceChildren();
+    }
+  }
+
+  /* =========================================================
+     VISUAL TRACK
      ========================================================= */
 
   function createGroupElement(group) {
     const groupElement = document.createElement("span");
 
     groupElement.className = "cwtype-group";
+
     groupElement.style.display = "inline-flex";
+
     groupElement.style.alignItems = "center";
+
     groupElement.style.verticalAlign = "middle";
+
     groupElement.style.whiteSpace = "nowrap";
+
     groupElement.style.gap = "0.32em";
 
     group.forEach((item) => {
       const character = document.createElement("span");
 
       character.className = "cwtype-character";
+
       character.textContent = String(item);
+
       character.style.display = "inline-block";
+
       character.style.lineHeight = "1";
+
+      character.title = isAbbreviationMethod() ? String(item) : "";
 
       groupElement.appendChild(character);
     });
@@ -974,36 +1321,55 @@
     return groupElement;
   }
 
-  /* =========================================================
-     TRACK
-     ========================================================= */
+  function appendFixedGap(parent, className, width = "0.8em") {
+    const gap = document.createElement("span");
+
+    gap.className = className;
+
+    gap.style.width = width;
+
+    gap.style.flex = `0 0 ${width}`;
+
+    parent.appendChild(gap);
+  }
 
   function createTrack() {
+    if (!track) {
+      throw new Error("cwtype-track not found.");
+    }
+
     track.replaceChildren();
 
     currentGroups = createTrainingGroups();
 
-    expectedGroups = currentGroups.map((group) =>
-      group.map((item) => String(item)),
-    );
-
-    resetSolutionData();
-
     currentTiming = buildTimingSequence(currentGroups);
+
+    buildExpectedSequence();
+
+    characterTiming = buildCharacterTiming();
+
+    resetSolution();
 
     const line = document.createElement("div");
 
     line.className = "cwtype-line";
+
     line.style.position = "absolute";
+
     line.style.top = "50%";
+
     line.style.transform = "translateY(-50%)";
+
     line.style.display = "flex";
+
     line.style.alignItems = "center";
+
     line.style.whiteSpace = "nowrap";
 
     const vvv = document.createElement("span");
 
     vvv.className = "cwtype-vvv";
+
     vvv.textContent = "VVV";
 
     line.appendChild(vvv);
@@ -1013,16 +1379,17 @@
     const ka = document.createElement("span");
 
     ka.className = "cwtype-ka";
+
     ka.textContent = "KA";
 
     line.appendChild(ka);
 
     appendFixedGap(line, "cwtype-gap cwtype-gap-ka");
 
-    currentGroups.forEach((group, groupIndex) => {
+    currentGroups.forEach((group, index) => {
       line.appendChild(createGroupElement(group));
 
-      if (groupIndex < currentGroups.length - 1) {
+      if (index < currentGroups.length - 1) {
         appendFixedGap(line, "cwtype-group-gap", "0.9em");
       }
     });
@@ -1032,6 +1399,7 @@
     const plus = document.createElement("span");
 
     plus.className = "cwtype-plus";
+
     plus.textContent = "+";
 
     line.appendChild(plus);
@@ -1039,7 +1407,8 @@
     track.appendChild(line);
 
     if (showSolutionButton) {
-      showSolutionButton.disabled = expectedGroups.length === 0;
+      showSolutionButton.disabled = expectedCharacters.length === 0;
+
       showSolutionButton.dataset.active = "false";
     }
 
@@ -1050,22 +1419,17 @@
     return line;
   }
 
-  function appendFixedGap(parent, className, width = "0.8em") {
-    const gap = document.createElement("span");
-
-    gap.className = className;
-    gap.style.width = width;
-    gap.style.flex = `0 0 ${width}`;
-
-    parent.appendChild(gap);
-  }
-
   /* =========================================================
      POSITION
      ========================================================= */
 
   function layout(line) {
+    if (!laufband || !marker) {
+      return;
+    }
+
     const band = laufband.getBoundingClientRect();
+
     const markerRect = marker.getBoundingClientRect();
 
     const markerX = markerRect.left - band.left + markerRect.width / 2;
@@ -1077,7 +1441,7 @@
   }
 
   function setX(x) {
-    const line = track.querySelector(".cwtype-line");
+    const line = track?.querySelector(".cwtype-line");
 
     if (line) {
       line.style.left = `${x}px`;
@@ -1088,20 +1452,10 @@
      ANIMATION
      ========================================================= */
 
-  let running = false;
-  let paused = false;
-
-  let animationFrame = null;
-  let startTime = 0;
-  let elapsed = 0;
-  let duration = 1;
-
-  let startX = 0;
-  let endX = 0;
-
   function stopAnimation() {
     if (animationFrame !== null) {
       cancelAnimationFrame(animationFrame);
+
       animationFrame = null;
     }
   }
@@ -1114,9 +1468,12 @@
     elapsed = timestamp - startTime;
 
     const progress = Math.min(1, elapsed / duration);
+
     const x = startX + (endX - startX) * progress;
 
     setX(x);
+
+    updateProcessedCount();
 
     if (progress >= 1) {
       setX(endX);
@@ -1125,6 +1482,26 @@
     }
 
     animationFrame = requestAnimationFrame(animate);
+  }
+
+  /* =========================================================
+     BUTTONS
+     ========================================================= */
+
+  function updateButtons(active) {
+    if (startButton) {
+      startButton.disabled = active;
+    }
+
+    if (pauseButton) {
+      pauseButton.disabled = !active;
+
+      pauseButton.textContent = "⏸ Pause";
+    }
+
+    if (stopButton) {
+      stopButton.disabled = !active;
+    }
   }
 
   /* =========================================================
@@ -1146,6 +1523,10 @@
 
     finishMorseCharacter();
 
+    if (!track) {
+      return;
+    }
+
     track.style.visibility = "hidden";
 
     try {
@@ -1153,6 +1534,7 @@
 
       requestAnimationFrame(() => {
         layout(line);
+
         setX(startX);
 
         duration = getDuration();
@@ -1162,27 +1544,9 @@
         updateButtons(false);
       });
     } catch (error) {
-      console.error(error);
+      console.error("CW Type rebuild error:", error);
+
       track.style.visibility = "visible";
-    }
-  }
-
-  /* =========================================================
-     BUTTON STATE
-     ========================================================= */
-
-  function updateButtons(active) {
-    if (startButton) {
-      startButton.disabled = active;
-    }
-
-    if (pauseButton) {
-      pauseButton.disabled = !active;
-      pauseButton.textContent = "⏸ Pause";
-    }
-
-    if (stopButton) {
-      stopButton.disabled = !active;
     }
   }
 
@@ -1195,11 +1559,13 @@
       return;
     }
 
-    stopAnimation();
+    const audioReady = await ensureAudio();
 
-    if (!(await ensureAudio())) {
-      console.warn("CW audio could not be initialized.");
+    if (!audioReady) {
+      console.warn("CW audio could not be started.");
     }
+
+    stopAnimation();
 
     track.style.visibility = "hidden";
 
@@ -1210,7 +1576,11 @@
         layout(line);
 
         duration = getDuration();
+
         elapsed = 0;
+
+        processedCount = 0;
+        currentExpectedIndex = 0;
 
         running = true;
         paused = false;
@@ -1226,7 +1596,8 @@
         animationFrame = requestAnimationFrame(animate);
       });
     } catch (error) {
-      console.error(error);
+      console.error("CW Type start error:", error);
+
       track.style.visibility = "visible";
     }
   }
@@ -1241,9 +1612,12 @@
     }
 
     if (!paused) {
+      updateProcessedCount();
+
       paused = true;
 
       toneStop();
+
       stopAnimation();
 
       if (pauseButton) {
@@ -1254,6 +1628,7 @@
     }
 
     startTime = performance.now() - elapsed;
+
     paused = false;
 
     if (pauseButton) {
@@ -1264,15 +1639,18 @@
   }
 
   /* =========================================================
-     STOP / FINISH
+     STOP
      ========================================================= */
 
   function stop() {
+    if (running) {
+      updateProcessedCount();
+    }
+
     stopAnimation();
 
     running = false;
     paused = false;
-    elapsed = 0;
 
     toneStop();
 
@@ -1282,21 +1660,42 @@
 
     finishMorseCharacter();
 
+    elapsed = 0;
+
     setX(startX);
+
     updateButtons(false);
+
+    updateSolution();
   }
 
+  /* =========================================================
+     FINISH
+     ========================================================= */
+
   function finish() {
+    processedCount = expectedCharacters.length;
+
+    currentExpectedIndex = expectedCharacters.length;
+
     stopAnimation();
 
     running = false;
     paused = false;
 
     toneStop();
+
     setX(endX);
 
+    if (keyDown) {
+      finishKeyStroke();
+    }
+
     finishMorseCharacter();
+
     updateButtons(false);
+
+    updateSolution();
   }
 
   /* =========================================================
@@ -1315,12 +1714,15 @@
     currentMethod = method;
     currentLesson = 1;
 
+    stop();
+
     try {
       await loadAbbreviations();
     } catch (error) {
       console.error(error);
 
       abbreviationData = [];
+
       populateLessons();
       rebuild();
 
@@ -1338,6 +1740,7 @@
 
   function selectLesson() {
     const value = Number(lessonSelect.value);
+
     const count = getLessonCount();
 
     currentLesson =
@@ -1369,6 +1772,7 @@
   });
 
   methodSelect?.addEventListener("change", selectMethod);
+
   lessonSelect?.addEventListener("change", selectLesson);
 
   groupsInput?.addEventListener("input", () => {
@@ -1389,11 +1793,10 @@
     }
   });
 
-  toneInput?.addEventListener("input", updateTone);
-  volumeInput?.addEventListener("input", updateVolume);
-
   startButton?.addEventListener("click", start);
+
   pauseButton?.addEventListener("click", togglePause);
+
   stopButton?.addEventListener("click", stop);
 
   showSolutionButton?.addEventListener("click", toggleSolution);
@@ -1409,6 +1812,8 @@
      ========================================================= */
 
   async function init() {
+    ensureSolutionStyles();
+
     try {
       const response = await fetch("text/index.json", {
         cache: "no-store",

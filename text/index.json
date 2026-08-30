@@ -27,9 +27,15 @@
     },
     {
       "id": "abbreviations",
-      "name": "Abkürzungen",
+      "name": "Abbreviations",
       "source": "abbreviations.csv",
       "type": "abbreviations"
+    },
+    {
+      "id": "q-groups",
+      "name": "Q-Groups",
+      "source": "q-groups.csv",
+      "type": "q-groups"
     }
   ]
 }
