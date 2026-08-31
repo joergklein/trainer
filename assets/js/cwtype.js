@@ -1,6 +1,10 @@
 "use strict";
 
 (() => {
+  /* =========================================================
+     DOM
+     ========================================================= */
+
   const methodSelect = document.getElementById("method");
   const lessonSelect = document.getElementById("lesson");
   const groupsInput = document.getElementById("groups");
@@ -21,6 +25,10 @@
 
   const showSolutionButton = document.getElementById("show-solution");
   const solutionElement = document.getElementById("solution");
+
+  /* =========================================================
+     MORSE
+     ========================================================= */
 
   const MORSE = {
     A: ".-",
@@ -83,46 +91,125 @@
     Object.entries(MORSE).map(([character, code]) => [code, character]),
   );
 
+  /* =========================================================
+     MORSE TIMING
+     ========================================================= */
+
   const CW_DIT = 1;
   const CW_DAH = 3;
+
   const CW_ELEMENT_GAP = 1;
   const CW_CHARACTER_GAP = 3;
   const CW_WORD_GAP = 7;
 
+  /* =========================================================
+     VISUELLE DARSTELLUNG
+     ========================================================= */
+
   const CHARACTER_VISUAL_WIDTH = 24;
+
+  /*
+   * Innerhalb eines Blocks:
+   *
+   * VVV
+   * KA
+   * ABCDE
+   *
+   * KEIN zusätzlicher Abstand.
+   */
+
   const CHARACTER_VISUAL_GAP = 0;
+
+  /*
+   * Abstand ausschließlich zwischen Blöcken.
+   */
+
   const GROUP_VISUAL_GAP = 24;
+
+  /* =========================================================
+     STATE
+     ========================================================= */
 
   let methods = [];
   let customFiles = [];
+
   let currentMethod = null;
   let currentLesson = 1;
+
   let abbreviationData = [];
+
   let currentGroups = [];
+
   let expectedCharacters = [];
   let typedSequence = [];
 
+  /* =========================================================
+     BLOCKS
+     ========================================================= */
+
+  /*
+   * Jeder Block enthält zusammengehörige Zeichen.
+   *
+   * Beispiel:
+   *
+   * VVV
+   * KA
+   * nein
+   * Entschuldigung
+   * nein
+   *
+   * Innerhalb eines Blocks gibt es KEINEN Wortabstand.
+   */
+
+  let characterBlocks = [];
+
+  /* =========================================================
+     MORSE TIMELINE
+     ========================================================= */
+
   let characterTimeline = [];
   let totalUnits = 0;
+
   let currentTimelineIndex = -1;
   let visibleCharacterCount = 0;
+
+  /* =========================================================
+     VISUELLE TIMELINE
+     ========================================================= */
 
   let visualTimeline = [];
   let totalVisualWidth = 0;
 
+  /* =========================================================
+     ANIMATION
+     ========================================================= */
+
   let running = false;
   let paused = false;
+
   let animationFrame = null;
+
   let startTime = 0;
   let elapsed = 0;
   let duration = 1;
+
   let markerX = 0;
 
+  /* =========================================================
+     EINGABE
+     ========================================================= */
+
   let morseInput = "";
+
   let keyDown = false;
   let keyDownStarted = 0;
   let characterTimer = null;
+
   let ignoreSpaceKeyUp = false;
+
+  /* =========================================================
+     EINSTELLUNGEN
+     ========================================================= */
 
   function getWpm() {
     const value = Number(wpmInput?.value);
@@ -176,6 +263,10 @@
     };
   }
 
+  /* =========================================================
+     MORSE UNITS
+     ========================================================= */
+
   function morseUnits(character) {
     const code = MORSE[String(character).toUpperCase()];
 
@@ -196,8 +287,13 @@
     return units;
   }
 
+  /* =========================================================
+     CSV
+     ========================================================= */
+
   function parseCSVLine(line) {
     const values = [];
+
     let value = "";
     let quoted = false;
 
@@ -243,6 +339,7 @@
 
     for (let i = 1; i < lines.length; i++) {
       const values = parseCSVLine(lines[i]);
+
       const abbreviation = values[0]?.trim() || "";
       const meaning = values[1]?.trim() || "";
 
@@ -256,6 +353,10 @@
 
     return result;
   }
+
+  /* =========================================================
+     METHODEN
+     ========================================================= */
 
   function isAbbreviationMethod() {
     return (
@@ -305,6 +406,7 @@
       }
 
       abbreviationData = file.data.slice();
+
       return;
     }
 
@@ -318,6 +420,10 @@
 
     abbreviationData = parseCSV(await response.text());
   }
+
+  /* =========================================================
+     LESSON
+     ========================================================= */
 
   function getLessonCount() {
     if (isAbbreviationMethod()) {
@@ -362,6 +468,10 @@
     }
   }
 
+  /* =========================================================
+     TRAININGSGRUPPEN
+     ========================================================= */
+
   function createTrainingGroups() {
     const available = getCurrentLessonValues();
 
@@ -370,6 +480,7 @@
     }
 
     const { groups, groupSize } = getGroupSettings();
+
     const result = [];
 
     for (let groupIndex = 0; groupIndex < groups; groupIndex++) {
@@ -377,6 +488,7 @@
 
       for (let itemIndex = 0; itemIndex < groupSize; itemIndex++) {
         const index = Math.floor(Math.random() * available.length);
+
         group.push(String(available[index]));
       }
 
@@ -386,78 +498,147 @@
     return result;
   }
 
-  function buildExpectedCharacters() {
-    const result = [];
+  /* =========================================================
+     BLOCKS AUFBAUEN
+     ========================================================= */
 
-    result.push("V");
-    result.push("V");
-    result.push("V");
+  function buildCharacterBlocks() {
+    const blocks = [];
 
-    result.push("K");
-    result.push("A");
+    /*
+     * Block 1: VVV
+     */
+
+    blocks.push({
+      text: "VVV",
+    });
+
+    /*
+     * Block 2: KA
+     */
+
+    blocks.push({
+      text: "KA",
+    });
+
+    /*
+     * Trainingsdaten:
+     *
+     * JEDES Element ist ein eigener Block.
+     *
+     * Beispiel:
+     *
+     * nein
+     * Entschuldigung
+     * nein
+     *
+     * und NICHT:
+     *
+     * n e i n
+     */
 
     currentGroups.forEach((group) => {
       group.forEach((item) => {
-        for (const character of Array.from(String(item))) {
-          result.push(character);
-        }
+        blocks.push({
+          text: String(item),
+        });
       });
     });
 
-    result.push("+");
+    /*
+     * Abschlusszeichen als eigener Block.
+     */
+
+    blocks.push({
+      text: "+",
+    });
+
+    characterBlocks = blocks;
+
+    return blocks;
+  }
+
+  /* =========================================================
+     ERWARTETE ZEICHEN
+     ========================================================= */
+
+  function buildExpectedCharacters() {
+    buildCharacterBlocks();
+
+    const result = [];
+
+    characterBlocks.forEach((block) => {
+      for (const character of Array.from(block.text)) {
+        result.push(character);
+      }
+    });
 
     expectedCharacters = result;
+
     typedSequence = expectedCharacters.map(() => null);
+
     currentTimelineIndex = -1;
     visibleCharacterCount = 0;
   }
 
-  function getGroupCharacterInfo(globalIndex) {
-    let index = 5;
+  /* =========================================================
+     BLOCK-INFORMATION
+     ========================================================= */
 
-    for (let groupIndex = 0; groupIndex < currentGroups.length; groupIndex++) {
-      const group = currentGroups[groupIndex];
+  function getBlockCharacterInfo(globalIndex) {
+    let index = 0;
 
-      for (let itemIndex = 0; itemIndex < group.length; itemIndex++) {
-        const item = String(group[itemIndex]);
-        const characters = Array.from(item);
+    for (
+      let blockIndex = 0;
+      blockIndex < characterBlocks.length;
+      blockIndex++
+    ) {
+      const block = characterBlocks[blockIndex];
 
-        for (
-          let characterIndex = 0;
-          characterIndex < characters.length;
-          characterIndex++
-        ) {
-          if (index === globalIndex) {
-            return {
-              groupIndex,
-              itemIndex,
-              characterIndex,
-              itemLength: characters.length,
-              isLastCharacterOfItem: characterIndex === characters.length - 1,
-            };
-          }
+      const characters = Array.from(block.text);
 
-          index++;
+      for (
+        let characterIndex = 0;
+        characterIndex < characters.length;
+        characterIndex++
+      ) {
+        if (index === globalIndex) {
+          return {
+            blockIndex,
+            characterIndex,
+            blockLength: characters.length,
+            isFirstCharacterOfBlock: characterIndex === 0,
+            isLastCharacterOfBlock: characterIndex === characters.length - 1,
+          };
         }
+
+        index++;
       }
     }
 
     return {
-      groupIndex: -1,
-      itemIndex: -1,
+      blockIndex: -1,
       characterIndex: -1,
-      itemLength: 0,
-      isLastCharacterOfItem: false,
+      blockLength: 0,
+      isFirstCharacterOfBlock: false,
+      isLastCharacterOfBlock: false,
     };
   }
 
+  /* =========================================================
+     MORSE TIMELINE
+     ========================================================= */
+
   function buildCharacterTimeline() {
     const timeline = [];
+
     let units = 0;
 
     expectedCharacters.forEach((character, index) => {
       const startUnits = units;
+
       const characterLength = morseUnits(character);
+
       const endUnits = startUnits + characterLength;
 
       timeline.push({
@@ -469,59 +650,54 @@
 
       units = endUnits;
 
-      if (index === 2) {
-        units += CW_WORD_GAP;
-        return;
-      }
+      if (index < expectedCharacters.length - 1) {
+        const info = getBlockCharacterInfo(index);
 
-      if (index === 4) {
-        units += CW_WORD_GAP;
-        return;
-      }
+        /*
+         * Letztes Zeichen eines Blocks:
+         *
+         * echter Wortabstand.
+         */
 
-      if (index >= 5 && index < expectedCharacters.length - 1) {
-        const info = getGroupCharacterInfo(index);
-
-        if (info.isLastCharacterOfItem) {
+        if (info.isLastCharacterOfBlock) {
           units += CW_WORD_GAP;
         } else {
+          /*
+           * Zeichen innerhalb desselben Blocks.
+           */
+
           units += CW_CHARACTER_GAP;
         }
-
-        return;
-      }
-
-      if (index < expectedCharacters.length - 1) {
-        units += CW_CHARACTER_GAP;
       }
     });
 
     characterTimeline = timeline;
+
     totalUnits = timeline.length ? timeline[timeline.length - 1].endUnits : 0;
 
     return timeline;
   }
 
+  /* =========================================================
+     VISUELLE TIMELINE
+     ========================================================= */
+
   function buildVisualTimeline() {
     const timeline = [];
+
     let x = 0;
 
     expectedCharacters.forEach((character, index) => {
-      let gapBefore = 0;
+      const info = getBlockCharacterInfo(index);
 
-      if (index > 0) {
-        if (index === 3) {
-          gapBefore = GROUP_VISUAL_GAP;
-        } else if (index === 5) {
-          gapBefore = GROUP_VISUAL_GAP;
-        } else if (index > 5 && isStartOfTrainingGroup(index)) {
-          gapBefore = GROUP_VISUAL_GAP;
-        } else {
-          gapBefore = CHARACTER_VISUAL_GAP;
-        }
+      /*
+       * Abstand NUR beim ersten Zeichen
+       * eines neuen Blocks.
+       */
+
+      if (index > 0 && info.isFirstCharacterOfBlock) {
+        x += GROUP_VISUAL_GAP;
       }
-
-      x += gapBefore;
 
       timeline.push({
         index,
@@ -530,24 +706,23 @@
         width: CHARACTER_VISUAL_WIDTH,
       });
 
-      x += CHARACTER_VISUAL_WIDTH;
+      /*
+       * Nächstes Zeichen direkt anschließen.
+       */
+
+      x += CHARACTER_VISUAL_WIDTH + CHARACTER_VISUAL_GAP;
     });
 
     visualTimeline = timeline;
+
     totalVisualWidth = Math.max(0, x);
 
     return timeline;
   }
 
-  function isStartOfTrainingGroup(index) {
-    if (index < 5 || index >= expectedCharacters.length - 1) {
-      return false;
-    }
-
-    const info = getGroupCharacterInfo(index);
-
-    return info.itemIndex === 0 && info.characterIndex === 0;
-  }
+  /* =========================================================
+     DAUER
+     ========================================================= */
 
   function getDuration() {
     if (!totalUnits) {
@@ -556,6 +731,10 @@
 
     return Math.max(1, totalUnits * getDitMilliseconds());
   }
+
+  /* =========================================================
+     ELAPSED -> MORSE UNITS
+     ========================================================= */
 
   function getElapsedUnits() {
     const dit = getDitMilliseconds();
@@ -570,6 +749,10 @@
   function getTimelinePosition() {
     return Math.max(0, Math.min(totalUnits, getElapsedUnits()));
   }
+
+  /* =========================================================
+     SYNCHRONISIERTER ZEICHENINDEX
+     ========================================================= */
 
   function getSynchronizedCharacterIndex(units) {
     if (!characterTimeline.length) {
@@ -589,8 +772,13 @@
     return index;
   }
 
+  /* =========================================================
+     SYNCHRONISIERTE ANZEIGE
+     ========================================================= */
+
   function updateSynchronizedState() {
     const units = getTimelinePosition();
+
     const index = getSynchronizedCharacterIndex(units);
 
     currentTimelineIndex = index;
@@ -602,6 +790,10 @@
 
     visibleCharacterCount = Math.min(index + 1, expectedCharacters.length);
   }
+
+  /* =========================================================
+     SOLUTION CSS
+     ========================================================= */
 
   function ensureSolutionStyles() {
     if (document.getElementById("cwtype-solution-runtime-style")) {
@@ -638,11 +830,6 @@
         text-underline-offset: 3px;
       }
 
-      .cwtype-solution-character-gap {
-        display: inline-block;
-        width: 0;
-      }
-
       .cwtype-solution-group-gap {
         display: inline-block;
         width: 1.35em;
@@ -652,6 +839,10 @@
     document.head.appendChild(style);
   }
 
+  /* =========================================================
+     SOLUTION ZEICHEN
+     ========================================================= */
+
   function createSolutionCharacter(expected, typed, visible) {
     const element = document.createElement("span");
 
@@ -659,13 +850,17 @@
 
     if (!visible) {
       element.textContent = "";
+
       return element;
     }
 
     if (typed === null || typed === "") {
       element.textContent = "_";
+
       element.classList.add("missing");
+
       element.title = "Erwartet: " + expected;
+
       return element;
     }
 
@@ -673,37 +868,40 @@
 
     if (String(typed).toUpperCase() === String(expected).toUpperCase()) {
       element.classList.add("correct");
+
       return element;
     }
 
     element.classList.add("wrong");
+
     element.title = "Erwartet: " + expected;
 
     return element;
   }
 
-  function createSolutionRange(startIndex, endIndex) {
+  /* =========================================================
+     SOLUTION BLOCK
+     ========================================================= */
+
+  function createSolutionBlock(block, startIndex, endIndex) {
     const container = document.createElement("span");
 
     for (let index = startIndex; index < endIndex; index++) {
       const expected = expectedCharacters[index];
+
       const typed = typedSequence[index];
+
       const visible = index < visibleCharacterCount;
 
       container.appendChild(createSolutionCharacter(expected, typed, visible));
-
-      if (index < endIndex - 1) {
-        const gap = document.createElement("span");
-
-        gap.className = "cwtype-solution-character-gap";
-        gap.textContent = "";
-
-        container.appendChild(gap);
-      }
     }
 
     return container;
   }
+
+  /* =========================================================
+     SOLUTION
+     ========================================================= */
 
   function updateSolution() {
     if (!solutionElement) {
@@ -731,66 +929,50 @@
       return;
     }
 
-    const vvvEnd = Math.min(visibleCount, 3);
+    let globalIndex = 0;
 
-    if (vvvEnd > 0) {
-      solutionElement.appendChild(createSolutionRange(0, vvvEnd));
-    }
+    characterBlocks.forEach((block, blockIndex) => {
+      const length = Array.from(block.text).length;
 
-    if (visibleCount > 3) {
-      appendSolutionGroupGap();
-    }
+      const blockStart = globalIndex;
+      const blockEnd = blockStart + length;
 
-    if (visibleCount > 3) {
-      const kaEnd = Math.min(visibleCount, 5);
+      globalIndex = blockEnd;
 
-      solutionElement.appendChild(createSolutionRange(3, kaEnd));
-    }
-
-    let globalIndex = 5;
-
-    currentGroups.forEach((group) => {
-      let characterCount = 0;
-
-      group.forEach((item) => {
-        characterCount += Array.from(String(item)).length;
-      });
-
-      const groupStart = globalIndex;
-      const groupEnd = globalIndex + characterCount;
-
-      globalIndex = groupEnd;
-
-      if (visibleCount <= groupStart) {
+      if (visibleCount <= blockStart) {
         return;
       }
 
-      appendSolutionGroupGap();
+      /*
+       * Abstand ausschließlich zwischen
+       * den Blöcken.
+       */
 
-      const end = Math.min(visibleCount, groupEnd);
+      if (blockIndex > 0) {
+        appendSolutionGroupGap();
+      }
 
-      solutionElement.appendChild(createSolutionRange(groupStart, end));
-    });
-
-    const plusIndex = expectedCharacters.length - 1;
-
-    if (visibleCount > plusIndex) {
-      appendSolutionGroupGap();
+      const visibleEnd = Math.min(visibleCount, blockEnd);
 
       solutionElement.appendChild(
-        createSolutionRange(plusIndex, plusIndex + 1),
+        createSolutionBlock(block, blockStart, visibleEnd),
       );
-    }
+    });
   }
 
   function appendSolutionGroupGap() {
     const gap = document.createElement("span");
 
     gap.className = "cwtype-solution-group-gap";
+
     gap.textContent = " ";
 
     solutionElement.appendChild(gap);
   }
+
+  /* =========================================================
+     SOLUTION EIN / AUS
+     ========================================================= */
 
   function showSolution() {
     if (!solutionElement) {
@@ -817,6 +999,7 @@
       }
 
       solutionElement.hidden = true;
+
       return;
     }
 
@@ -832,7 +1015,9 @@
     }
 
     currentTimelineIndex = -1;
+
     visibleCharacterCount = 0;
+
     typedSequence = expectedCharacters.map(() => null);
 
     if (showSolutionButton) {
@@ -845,24 +1030,41 @@
     }
   }
 
+  /* =========================================================
+     LAUFBAND ZEICHEN
+     ========================================================= */
+
   function createCharacterElement(character, index) {
     const element = document.createElement("span");
 
     element.className = "cwtype-character";
+
     element.dataset.index = String(index);
+
     element.textContent = String(character);
 
     element.style.position = "absolute";
+
     element.style.top = "50%";
+
     element.style.width = `${CHARACTER_VISUAL_WIDTH}px`;
+
     element.style.height = "1em";
+
     element.style.textAlign = "center";
+
     element.style.transform = "translateY(-50%)";
+
     element.style.lineHeight = "1";
+
     element.style.whiteSpace = "nowrap";
 
     return element;
   }
+
+  /* =========================================================
+     LAUFBAND TRACK
+     ========================================================= */
 
   function createTrack() {
     if (!track) {
@@ -871,21 +1073,54 @@
 
     track.replaceChildren();
 
+    /*
+     * Trainingsgruppen erzeugen.
+     */
+
     currentGroups = createTrainingGroups();
 
+    /*
+     * Blöcke und gemeinsame Zeichenfolge.
+     */
+
     buildExpectedCharacters();
+
+    /*
+     * Gemeinsame Morse-Timeline.
+     */
+
     buildCharacterTimeline();
+
+    /*
+     * Visuelle Timeline.
+     */
+
     buildVisualTimeline();
+
+    /*
+     * Solution zurücksetzen.
+     */
+
     resetSolution();
+
+    /*
+     * Laufband.
+     */
 
     const line = document.createElement("div");
 
     line.className = "cwtype-line";
+
     line.style.position = "absolute";
+
     line.style.top = "0";
+
     line.style.left = "0";
+
     line.style.height = "100%";
+
     line.style.width = `${totalVisualWidth}px`;
+
     line.style.whiteSpace = "nowrap";
 
     visualTimeline.forEach((visualItem) => {
@@ -895,6 +1130,7 @@
       );
 
       element.style.left = `${visualItem.x}px`;
+
       line.appendChild(element);
     });
 
@@ -913,16 +1149,25 @@
     return line;
   }
 
+  /* =========================================================
+     LAUFBAND LAYOUT
+     ========================================================= */
+
   function layout() {
     if (!laufband || !marker) {
       return;
     }
 
     const band = laufband.getBoundingClientRect();
+
     const markerRect = marker.getBoundingClientRect();
 
     markerX = markerRect.left - band.left + markerRect.width / 2;
   }
+
+  /* =========================================================
+     ZEIT -> VISUELLE POSITION
+     ========================================================= */
 
   function getVisualXForUnits(units) {
     if (!characterTimeline.length || !visualTimeline.length) {
@@ -948,6 +1193,7 @@
     }
 
     const current = characterTimeline[index];
+
     const visualCurrent = visualTimeline[index];
 
     if (index >= characterTimeline.length - 1) {
@@ -955,6 +1201,7 @@
     }
 
     const next = characterTimeline[index + 1];
+
     const visualNext = visualTimeline[index + 1];
 
     const interval = Math.max(0.0001, next.startUnits - current.startUnits);
@@ -967,6 +1214,10 @@
     return visualCurrent.x + (visualNext.x - visualCurrent.x) * progress;
   }
 
+  /* =========================================================
+     LAUFBAND POSITION
+     ========================================================= */
+
   function setTrackPositionForUnits(units) {
     const line = track?.querySelector(".cwtype-line");
 
@@ -975,6 +1226,7 @@
     }
 
     const visualX = getVisualXForUnits(units);
+
     const x = markerX - visualX - CHARACTER_VISUAL_WIDTH / 2;
 
     line.style.left = `${x}px`;
@@ -988,9 +1240,14 @@
     setTrackPositionForUnits(totalUnits);
   }
 
+  /* =========================================================
+     ANIMATION
+     ========================================================= */
+
   function stopAnimation() {
     if (animationFrame !== null) {
       cancelAnimationFrame(animationFrame);
+
       animationFrame = null;
     }
   }
@@ -1016,19 +1273,35 @@
       visibleCharacterCount = expectedCharacters.length;
 
       updateSolution();
+
       finish();
 
       return;
     }
 
+    /*
+     * EIN gemeinsamer Zeitwert.
+     */
+
     const units = getTimelinePosition();
 
+    /*
+     * Laufband und Solution verwenden
+     * dieselbe Timelineposition.
+     */
+
     setTrackPositionForUnits(units);
+
     updateSynchronizedState();
+
     updateSolution();
 
     animationFrame = requestAnimationFrame(animate);
   }
+
+  /* =========================================================
+     AUDIO
+     ========================================================= */
 
   async function ensureAudio() {
     if (typeof INCWAudio === "undefined") {
@@ -1045,6 +1318,7 @@
       return !!audio && audio.state === "running";
     } catch (error) {
       console.error("Audio:", error);
+
       return false;
     }
   }
@@ -1080,6 +1354,10 @@
     }
   }
 
+  /* =========================================================
+     MORSE EINGABE
+     ========================================================= */
+
   function addMorseElement(element) {
     if (element !== "." && element !== "-") {
       return;
@@ -1096,6 +1374,7 @@
     const character = MORSE_REVERSE[morseInput] || "?";
 
     addTypedCharacter(character);
+
     morseInput = "";
   }
 
@@ -1123,9 +1402,14 @@
 
     characterTimer = window.setTimeout(() => {
       characterTimer = null;
+
       finishMorseCharacter();
     }, getDitMilliseconds() * 3);
   }
+
+  /* =========================================================
+     GETASTETES ZEICHEN
+     ========================================================= */
 
   function addTypedCharacter(character) {
     if (!running || paused) {
@@ -1147,6 +1431,10 @@
     updateSolution();
   }
 
+  /* =========================================================
+     SPACE DOWN
+     ========================================================= */
+
   async function handleSpaceDown(event) {
     if (event.code !== "Space") {
       return;
@@ -1166,6 +1454,7 @@
       }
 
       togglePause();
+
       return;
     }
 
@@ -1179,14 +1468,20 @@
 
     if (characterTimer !== null) {
       clearTimeout(characterTimer);
+
       characterTimer = null;
     }
 
     keyDown = true;
+
     keyDownStarted = performance.now();
 
     await toneStart();
   }
+
+  /* =========================================================
+     SPACE UP
+     ========================================================= */
 
   function handleSpaceUp(event) {
     if (event.code !== "Space") {
@@ -1205,8 +1500,13 @@
     }
 
     finishKeyStroke();
+
     scheduleCharacterFinish();
   }
+
+  /* =========================================================
+     CTRL + X
+     ========================================================= */
 
   function handleControlX(event) {
     if (!event.ctrlKey || event.key.toLowerCase() !== "x") {
@@ -1220,9 +1520,11 @@
     }
 
     finishMorseCharacter();
+
     updateSynchronizedState();
 
     stop();
+
     showSolution();
   }
 
@@ -1234,6 +1536,10 @@
     }
   }
 
+  /* =========================================================
+     BUTTONS
+     ========================================================= */
+
   function updateButtons(active) {
     if (startButton) {
       startButton.disabled = active;
@@ -1241,6 +1547,7 @@
 
     if (pauseButton) {
       pauseButton.disabled = !active;
+
       pauseButton.textContent = paused ? "▶ Resume" : "⏸ Pause";
     }
 
@@ -1249,11 +1556,16 @@
     }
   }
 
+  /* =========================================================
+     REBUILD
+     ========================================================= */
+
   function rebuild() {
     stopAnimation();
 
     running = false;
     paused = false;
+
     elapsed = 0;
 
     toneStop();
@@ -1275,18 +1587,25 @@
 
       requestAnimationFrame(() => {
         layout();
+
         setTrackAtStart();
 
         duration = getDuration();
 
         track.style.visibility = "visible";
+
         updateButtons(false);
       });
     } catch (error) {
       console.error("CW rebuild:", error);
+
       track.style.visibility = "visible";
     }
   }
+
+  /* =========================================================
+     START
+     ========================================================= */
 
   async function start() {
     if (running) {
@@ -1306,9 +1625,11 @@
         layout();
 
         duration = getDuration();
+
         elapsed = 0;
 
         currentTimelineIndex = -1;
+
         visibleCharacterCount = 0;
 
         typedSequence = expectedCharacters.map(() => null);
@@ -1323,16 +1644,23 @@
         track.style.visibility = "visible";
 
         updateButtons(true);
+
         updateSynchronizedState();
+
         updateSolution();
 
         animationFrame = requestAnimationFrame(animate);
       });
     } catch (error) {
       console.error("CW start:", error);
+
       track.style.visibility = "visible";
     }
   }
+
+  /* =========================================================
+     PAUSE / RESUME
+     ========================================================= */
 
   function togglePause() {
     if (!running) {
@@ -1343,10 +1671,13 @@
       elapsed = Math.max(0, Math.min(duration, performance.now() - startTime));
 
       updateSynchronizedState();
+
       setTrackPositionForUnits(getTimelinePosition());
 
       paused = true;
+
       toneStop();
+
       stopAnimation();
 
       if (pauseButton) {
@@ -1367,11 +1698,16 @@
     animationFrame = requestAnimationFrame(animate);
   }
 
+  /* =========================================================
+     STOP
+     ========================================================= */
+
   function stop() {
     if (running) {
       elapsed = Math.max(0, Math.min(duration, performance.now() - startTime));
 
       updateSynchronizedState();
+
       setTrackPositionForUnits(getTimelinePosition());
     }
 
@@ -1389,9 +1725,15 @@
     finishMorseCharacter();
 
     updateSynchronizedState();
+
     updateSolution();
+
     updateButtons(false);
   }
+
+  /* =========================================================
+     FINISH
+     ========================================================= */
 
   function finish() {
     elapsed = duration;
@@ -1406,6 +1748,7 @@
     paused = false;
 
     toneStop();
+
     setTrackAtEnd();
 
     if (keyDown) {
@@ -1415,8 +1758,13 @@
     finishMorseCharacter();
 
     updateButtons(false);
+
     updateSolution();
   }
+
+  /* =========================================================
+     METHODEN AUSWAHL
+     ========================================================= */
 
   function rebuildMethods(selectId = null) {
     if (!methodSelect) {
@@ -1424,6 +1772,7 @@
     }
 
     const allMethods = getAllMethods();
+
     const previousId = selectId || currentMethod?.id || null;
 
     methodSelect.replaceChildren();
@@ -1432,6 +1781,7 @@
       const option = document.createElement("option");
 
       option.value = method.id;
+
       option.textContent = method.name || method.id;
 
       methodSelect.appendChild(option);
@@ -1439,9 +1789,11 @@
 
     if (!allMethods.length) {
       currentMethod = null;
+
       abbreviationData = [];
 
       populateLessons();
+
       rebuild();
 
       return;
@@ -1472,6 +1824,7 @@
       await loadAbbreviations();
     } catch (error) {
       console.error(error);
+
       abbreviationData = [];
     }
 
@@ -1486,6 +1839,7 @@
 
   function selectLesson() {
     const value = Number(lessonSelect.value);
+
     const count = getLessonCount();
 
     currentLesson =
@@ -1496,6 +1850,10 @@
     rebuild();
   }
 
+  /* =========================================================
+     CUSTOM CSV
+     ========================================================= */
+
   function renderCustomFiles() {
     if (!customFilesElement) {
       return;
@@ -1505,22 +1863,27 @@
 
     customFiles.forEach((file) => {
       const row = document.createElement("div");
+
       const name = document.createElement("span");
-      const button = document.createElement("button");
 
       name.textContent = file.name;
 
+      const button = document.createElement("button");
+
       button.type = "button";
+
       button.textContent = "Remove";
 
       button.addEventListener("click", () => {
         customFiles = customFiles.filter((item) => item.id !== file.id);
 
         renderCustomFiles();
+
         rebuildMethods();
       });
 
       row.append(name, button);
+
       customFilesElement.appendChild(row);
     });
   }
@@ -1538,8 +1901,13 @@
     });
 
     renderCustomFiles();
+
     rebuildMethods(id);
   }
+
+  /* =========================================================
+     EVENTS
+     ========================================================= */
 
   window.addEventListener("keydown", handleSpaceDown);
 
@@ -1595,11 +1963,19 @@
     customFileInput.value = "";
   });
 
+  /* =========================================================
+     RESIZE
+     ========================================================= */
+
   window.addEventListener("resize", () => {
     if (!running) {
       rebuild();
     }
   });
+
+  /* =========================================================
+     INIT
+     ========================================================= */
 
   async function init() {
     ensureSolutionStyles();
