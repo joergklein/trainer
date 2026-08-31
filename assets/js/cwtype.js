@@ -1,19 +1,13 @@
 "use strict";
 
 (() => {
-  /* =========================================================
-     DOM
-     ========================================================= */
-
   const methodSelect = document.getElementById("method");
   const lessonSelect = document.getElementById("lesson");
-
   const groupsInput = document.getElementById("groups");
   const groupSizeInput = document.getElementById("groupSize");
   const wpmInput = document.getElementById("wpm");
   const toneInput = document.getElementById("tone");
   const volumeInput = document.getElementById("volume");
-
   const customFileInput = document.getElementById("custom-file");
   const customFilesElement = document.getElementById("custom-files");
 
@@ -27,59 +21,6 @@
 
   const showSolutionButton = document.getElementById("show-solution");
   const solutionElement = document.getElementById("solution");
-
-  /* =========================================================
-     DATA
-     ========================================================= */
-
-  let methods = [];
-  let customFiles = [];
-
-  let currentMethod = null;
-  let currentLesson = 1;
-
-  let abbreviationData = [];
-
-  /* =========================================================
-     TRAINING
-     ========================================================= */
-
-  let currentGroups = [];
-  let currentTiming = [];
-
-  let expectedCharacters = [];
-  let typedSequence = [];
-
-  let processedCount = 0;
-  let currentExpectedIndex = 0;
-
-  let morseInput = "";
-
-  /* =========================================================
-     STATE
-     ========================================================= */
-
-  let running = false;
-  let paused = false;
-
-  let animationFrame = null;
-
-  let startTime = 0;
-  let elapsed = 0;
-  let duration = 1;
-
-  let startX = 0;
-  let endX = 0;
-
-  let characterTiming = [];
-
-  let keyDown = false;
-  let keyDownStarted = 0;
-  let characterTimer = null;
-
-  /* =========================================================
-     MORSE
-     ========================================================= */
 
   const MORSE = {
     A: ".-",
@@ -142,48 +83,46 @@
     Object.entries(MORSE).map(([character, code]) => [code, character]),
   );
 
-  /* =========================================================
-     CW TIMING
-     ========================================================= */
-
   const CW_DIT = 1;
   const CW_DAH = 3;
-
   const CW_ELEMENT_GAP = 1;
   const CW_CHARACTER_GAP = 3;
   const CW_WORD_GAP = 7;
-  const CW_WORD_GAP_EXTRA = CW_WORD_GAP - CW_CHARACTER_GAP;
 
-  const CW_BEGIN_PROSIGN = "-.-.-";
+  const CHARACTER_VISUAL_WIDTH = 24;
+  const CHARACTER_VISUAL_GAP = 0;
+  const GROUP_VISUAL_GAP = 24;
 
-  /* =========================================================
-     HELPERS
-     ========================================================= */
+  let methods = [];
+  let customFiles = [];
+  let currentMethod = null;
+  let currentLesson = 1;
+  let abbreviationData = [];
+  let currentGroups = [];
+  let expectedCharacters = [];
+  let typedSequence = [];
 
-  function isAbbreviationMethod() {
-    return (
-      typeof currentMethod?.source === "string" ||
-      currentMethod?.type === "custom"
-    );
-  }
+  let characterTimeline = [];
+  let totalUnits = 0;
+  let currentTimelineIndex = -1;
+  let visibleCharacterCount = 0;
 
-  function isCustomMethod() {
-    return currentMethod?.type === "custom";
-  }
+  let visualTimeline = [];
+  let totalVisualWidth = 0;
 
-  function getAlphabet() {
-    return typeof currentMethod?.alphabet === "string"
-      ? Array.from(currentMethod.alphabet)
-      : [];
-  }
+  let running = false;
+  let paused = false;
+  let animationFrame = null;
+  let startTime = 0;
+  let elapsed = 0;
+  let duration = 1;
+  let markerX = 0;
 
-  function getAvailableAbbreviations() {
-    return abbreviationData.slice(0, currentLesson);
-  }
-
-  /* =========================================================
-     SETTINGS
-     ========================================================= */
+  let morseInput = "";
+  let keyDown = false;
+  let keyDownStarted = 0;
+  let characterTimer = null;
+  let ignoreSpaceKeyUp = false;
 
   function getWpm() {
     const value = Number(wpmInput?.value);
@@ -213,7 +152,7 @@
     const value = Number(volumeInput?.value);
 
     if (!Number.isFinite(value)) {
-      return 30;
+      return 0.3;
     }
 
     return Math.max(0, Math.min(100, value)) / 100;
@@ -237,64 +176,6 @@
     };
   }
 
-  /* =========================================================
-     AUDIO
-     ========================================================= */
-
-  async function ensureAudio() {
-    if (typeof INCWAudio === "undefined") {
-      return false;
-    }
-
-    if (typeof INCWAudio.start !== "function") {
-      return false;
-    }
-
-    try {
-      const audio = await INCWAudio.start();
-
-      return !!audio && audio.state === "running";
-    } catch (error) {
-      console.error("CW audio could not be initialized:", error);
-      return false;
-    }
-  }
-
-  async function toneStart() {
-    const ready = await ensureAudio();
-
-    if (!ready) {
-      return;
-    }
-
-    try {
-      INCWAudio.tone(
-        getToneFrequency(),
-        getDitMilliseconds() / 1000,
-        getVolume(),
-      );
-    } catch (error) {
-      console.error(error);
-    }
-  }
-
-  function toneStop() {
-    if (
-      typeof INCWAudio !== "undefined" &&
-      typeof INCWAudio.stop === "function"
-    ) {
-      try {
-        INCWAudio.stop();
-      } catch (error) {
-        console.error(error);
-      }
-    }
-  }
-
-  /* =========================================================
-     MORSE CALCULATION
-     ========================================================= */
-
   function morseUnits(character) {
     const code = MORSE[String(character).toUpperCase()];
 
@@ -314,54 +195,6 @@
 
     return units;
   }
-
-  function textUnits(text) {
-    const characters = Array.from(String(text));
-
-    if (!characters.length) {
-      return 0;
-    }
-
-    let units = 0;
-
-    characters.forEach((character, index) => {
-      units += morseUnits(character);
-
-      if (index < characters.length - 1) {
-        units += CW_CHARACTER_GAP;
-      }
-    });
-
-    return units + CW_WORD_GAP;
-  }
-
-  function vvvUnits() {
-    return (
-      morseUnits("V") +
-      CW_CHARACTER_GAP +
-      morseUnits("V") +
-      CW_CHARACTER_GAP +
-      morseUnits("V") +
-      CW_WORD_GAP
-    );
-  }
-
-  function kaUnits() {
-    let units = 0;
-
-    for (const symbol of CW_BEGIN_PROSIGN) {
-      units += symbol === "-" ? CW_DAH : CW_DIT;
-    }
-
-    units += (CW_BEGIN_PROSIGN.length - 1) * CW_ELEMENT_GAP;
-
-    return units + CW_WORD_GAP;
-  }
-
-  /* =========================================================
-     CSV
-     IDENTISCHES VERHALTEN WIE CWTRAINER
-     ========================================================= */
 
   function parseCSVLine(line) {
     const values = [];
@@ -403,18 +236,13 @@
       .filter((line) => line.trim() !== "");
 
     if (lines.length < 2) {
-      throw new Error("The CSV file contains no data.");
+      throw new Error("CSV enthält keine Daten.");
     }
 
     const result = [];
 
     for (let i = 1; i < lines.length; i++) {
       const values = parseCSVLine(lines[i]);
-
-      if (values.length < 1) {
-        continue;
-      }
-
       const abbreviation = values[0]?.trim() || "";
       const meaning = values[1]?.trim() || "";
 
@@ -426,99 +254,39 @@
       }
     }
 
-    if (!result.length) {
-      throw new Error("The CSV file contains no valid entries.");
-    }
-
     return result;
   }
 
-  /* =========================================================
-     CUSTOM FILES
-     ========================================================= */
+  function isAbbreviationMethod() {
+    return (
+      typeof currentMethod?.source === "string" ||
+      currentMethod?.type === "custom"
+    );
+  }
 
-  function createCustomMethod(file) {
-    return {
-      id: file.id,
-      name: file.name,
-      type: "custom",
-      customFileId: file.id,
-    };
+  function isCustomMethod() {
+    return currentMethod?.type === "custom";
+  }
+
+  function getAlphabet() {
+    if (typeof currentMethod?.alphabet !== "string") {
+      return [];
+    }
+
+    return Array.from(currentMethod.alphabet);
   }
 
   function getAllMethods() {
-    return [...methods, ...customFiles.map(createCustomMethod)];
+    return [
+      ...methods,
+      ...customFiles.map((file) => ({
+        id: file.id,
+        name: file.name,
+        type: "custom",
+        customFileId: file.id,
+      })),
+    ];
   }
-
-  function renderCustomFiles() {
-    if (!customFilesElement) {
-      return;
-    }
-
-    customFilesElement.replaceChildren();
-
-    for (const file of customFiles) {
-      const row = document.createElement("div");
-
-      row.className = "custom-file";
-
-      const name = document.createElement("span");
-      name.textContent = file.name;
-
-      const removeButton = document.createElement("button");
-
-      removeButton.type = "button";
-      removeButton.textContent = "Remove";
-
-      removeButton.addEventListener("click", () => {
-        removeCustomFile(file.id);
-      });
-
-      row.append(name, removeButton);
-
-      customFilesElement.appendChild(row);
-    }
-  }
-
-  async function addCustomFile(file) {
-    const data = parseCSV(await file.text());
-
-    const name = file.name.replace(/\.csv$/i, "");
-
-    const id =
-      "custom-" + Date.now() + "-" + Math.random().toString(36).slice(2);
-
-    customFiles.push({
-      id,
-      name,
-      data,
-    });
-
-    renderCustomFiles();
-    rebuildMethods(id);
-  }
-
-  function removeCustomFile(id) {
-    if (running) {
-      stop();
-    }
-
-    const selected = currentMethod?.customFileId === id;
-
-    customFiles = customFiles.filter((file) => file.id !== id);
-
-    renderCustomFiles();
-
-    if (selected) {
-      currentMethod = null;
-    }
-
-    rebuildMethods();
-  }
-
-  /* =========================================================
-     METHODS
-     ========================================================= */
 
   async function loadAbbreviations() {
     abbreviationData = [];
@@ -533,16 +301,11 @@
       );
 
       if (!file) {
-        throw new Error("Custom CSV file is no longer available.");
+        throw new Error("CSV-Datei nicht gefunden.");
       }
 
       abbreviationData = file.data.slice();
-
       return;
-    }
-
-    if (typeof currentMethod.source !== "string") {
-      throw new Error("No CSV file specified.");
     }
 
     const response = await fetch("text/" + currentMethod.source, {
@@ -550,61 +313,28 @@
     });
 
     if (!response.ok) {
-      throw new Error("CSV could not be loaded: HTTP " + response.status);
+      throw new Error("CSV konnte nicht geladen werden.");
     }
 
     abbreviationData = parseCSV(await response.text());
   }
 
-  function rebuildMethods(selectId = null) {
-    if (!methodSelect) {
-      return;
+  function getLessonCount() {
+    if (isAbbreviationMethod()) {
+      return abbreviationData.length;
     }
 
-    const previousId = selectId || currentMethod?.id || null;
-
-    const allMethods = getAllMethods();
-
-    methodSelect.replaceChildren();
-
-    for (const method of allMethods) {
-      if (!method?.id) {
-        continue;
-      }
-
-      const option = document.createElement("option");
-
-      option.value = method.id;
-      option.textContent = method.name || method.id;
-
-      methodSelect.appendChild(option);
-    }
-
-    if (!allMethods.length) {
-      currentMethod = null;
-      abbreviationData = [];
-
-      populateLessons();
-      rebuild();
-
-      return;
-    }
-
-    const exists = allMethods.some((method) => method.id === previousId);
-
-    methodSelect.value = exists ? previousId : allMethods[0].id;
-
-    selectMethod();
+    return getAlphabet().length;
   }
 
-  /* =========================================================
-     LESSONS
-     ========================================================= */
+  function getCurrentLessonValues() {
+    if (isAbbreviationMethod()) {
+      return abbreviationData
+        .slice(0, currentLesson)
+        .map((entry) => entry.abbreviation);
+    }
 
-  function getLessonCount() {
-    return isAbbreviationMethod()
-      ? abbreviationData.length
-      : getAlphabet().length;
+    return getAlphabet().slice(0, currentLesson);
   }
 
   function populateLessons() {
@@ -614,7 +344,9 @@
 
     lessonSelect.replaceChildren();
 
-    for (let i = 1; i <= getLessonCount(); i++) {
+    const count = getLessonCount();
+
+    for (let i = 1; i <= count; i++) {
       const option = document.createElement("option");
 
       option.value = String(i);
@@ -630,18 +362,6 @@
     }
   }
 
-  function getCurrentLessonValues() {
-    if (isAbbreviationMethod()) {
-      return getAvailableAbbreviations().map((entry) => entry.abbreviation);
-    }
-
-    return getAlphabet().slice(0, currentLesson);
-  }
-
-  /* =========================================================
-     TRAINING GROUPS
-     ========================================================= */
-
   function createTrainingGroups() {
     const available = getCurrentLessonValues();
 
@@ -650,7 +370,6 @@
     }
 
     const { groups, groupSize } = getGroupSettings();
-
     const result = [];
 
     for (let groupIndex = 0; groupIndex < groups; groupIndex++) {
@@ -658,7 +377,6 @@
 
       for (let itemIndex = 0; itemIndex < groupSize; itemIndex++) {
         const index = Math.floor(Math.random() * available.length);
-
         group.push(String(available[index]));
       }
 
@@ -668,161 +386,176 @@
     return result;
   }
 
-  /* =========================================================
-     TIMING
-     ========================================================= */
+  function buildExpectedCharacters() {
+    const result = [];
 
-  function buildTimingSequence(groups) {
-    const sequence = [];
+    result.push("V");
+    result.push("V");
+    result.push("V");
 
-    sequence.push({
-      text: "VVV",
-      type: "vvv",
-      units: vvvUnits(),
-    });
-
-    sequence.push({
-      text: "KA",
-      type: "ka",
-      units: kaUnits(),
-    });
-
-    groups.forEach((group, groupIndex) => {
-      group.forEach((item, itemIndex) => {
-        sequence.push({
-          text: String(item),
-          type: "training",
-          groupIndex,
-          itemIndex,
-          units: textUnits(item),
-        });
-      });
-    });
-
-    sequence.push({
-      text: "+",
-      type: "plus",
-      units: morseUnits("+"),
-    });
-
-    return sequence;
-  }
-
-  function getTotalUnits() {
-    return currentTiming.reduce((total, item) => total + item.units, 0);
-  }
-
-  function getDuration() {
-    return Math.max(1, getTotalUnits() * getDitMilliseconds());
-  }
-
-  /* =========================================================
-     EXPECTED SEQUENCE
-     ========================================================= */
-
-  function buildExpectedSequence() {
-    expectedCharacters = [];
-
-    expectedCharacters.push("V");
-    expectedCharacters.push("V");
-    expectedCharacters.push("V");
-
-    expectedCharacters.push("K");
-    expectedCharacters.push("A");
+    result.push("K");
+    result.push("A");
 
     currentGroups.forEach((group) => {
       group.forEach((item) => {
         for (const character of Array.from(String(item))) {
-          expectedCharacters.push(character);
+          result.push(character);
         }
       });
     });
 
-    typedSequence = expectedCharacters.map(() => null);
+    result.push("+");
 
-    processedCount = 0;
-    currentExpectedIndex = 0;
+    expectedCharacters = result;
+    typedSequence = expectedCharacters.map(() => null);
+    currentTimelineIndex = -1;
+    visibleCharacterCount = 0;
   }
 
-  /* =========================================================
-     CHARACTER TIMING
-     ========================================================= */
+  function getGroupCharacterInfo(globalIndex) {
+    let index = 5;
 
-  function buildCharacterTiming() {
-    const result = [];
+    for (let groupIndex = 0; groupIndex < currentGroups.length; groupIndex++) {
+      const group = currentGroups[groupIndex];
 
-    let currentUnits = 0;
+      for (let itemIndex = 0; itemIndex < group.length; itemIndex++) {
+        const item = String(group[itemIndex]);
+        const characters = Array.from(item);
 
-    const vvv = ["V", "V", "V"];
+        for (
+          let characterIndex = 0;
+          characterIndex < characters.length;
+          characterIndex++
+        ) {
+          if (index === globalIndex) {
+            return {
+              groupIndex,
+              itemIndex,
+              characterIndex,
+              itemLength: characters.length,
+              isLastCharacterOfItem: characterIndex === characters.length - 1,
+            };
+          }
 
-    vvv.forEach((character, index) => {
-      const units = morseUnits(character);
+          index++;
+        }
+      }
+    }
 
-      result.push({
+    return {
+      groupIndex: -1,
+      itemIndex: -1,
+      characterIndex: -1,
+      itemLength: 0,
+      isLastCharacterOfItem: false,
+    };
+  }
+
+  function buildCharacterTimeline() {
+    const timeline = [];
+    let units = 0;
+
+    expectedCharacters.forEach((character, index) => {
+      const startUnits = units;
+      const characterLength = morseUnits(character);
+      const endUnits = startUnits + characterLength;
+
+      timeline.push({
         index,
         character,
-        startUnits: currentUnits,
-        endUnits: currentUnits + units,
+        startUnits,
+        endUnits,
       });
 
-      currentUnits += units;
+      units = endUnits;
 
-      currentUnits += index < vvv.length - 1 ? CW_CHARACTER_GAP : CW_WORD_GAP;
+      if (index === 2) {
+        units += CW_WORD_GAP;
+        return;
+      }
+
+      if (index === 4) {
+        units += CW_WORD_GAP;
+        return;
+      }
+
+      if (index >= 5 && index < expectedCharacters.length - 1) {
+        const info = getGroupCharacterInfo(index);
+
+        if (info.isLastCharacterOfItem) {
+          units += CW_WORD_GAP;
+        } else {
+          units += CW_CHARACTER_GAP;
+        }
+
+        return;
+      }
+
+      if (index < expectedCharacters.length - 1) {
+        units += CW_CHARACTER_GAP;
+      }
     });
 
-    const kaStart = currentUnits;
+    characterTimeline = timeline;
+    totalUnits = timeline.length ? timeline[timeline.length - 1].endUnits : 0;
 
-    const kUnits = morseUnits("K");
-    const aUnits = morseUnits("A");
-
-    result.push({
-      index: 3,
-      character: "K",
-      startUnits: kaStart,
-      endUnits: kaStart + kUnits,
-    });
-
-    result.push({
-      index: 4,
-      character: "A",
-      startUnits: kaStart + kUnits,
-      endUnits: kaStart + kUnits + aUnits,
-    });
-
-    currentUnits += kUnits + aUnits + CW_WORD_GAP;
-
-    let globalIndex = 5;
-
-    currentGroups.forEach((group) => {
-      group.forEach((item) => {
-        const characters = Array.from(String(item));
-
-        characters.forEach((character, index) => {
-          const units = morseUnits(character);
-
-          result.push({
-            index: globalIndex,
-            character,
-            startUnits: currentUnits,
-            endUnits: currentUnits + units,
-          });
-
-          globalIndex++;
-
-          currentUnits += units;
-
-          currentUnits +=
-            index < characters.length - 1 ? CW_CHARACTER_GAP : CW_WORD_GAP;
-        });
-      });
-    });
-
-    return result;
+    return timeline;
   }
 
-  /* =========================================================
-     TIME / PROGRESS
-     ========================================================= */
+  function buildVisualTimeline() {
+    const timeline = [];
+    let x = 0;
+
+    expectedCharacters.forEach((character, index) => {
+      let gapBefore = 0;
+
+      if (index > 0) {
+        if (index === 3) {
+          gapBefore = GROUP_VISUAL_GAP;
+        } else if (index === 5) {
+          gapBefore = GROUP_VISUAL_GAP;
+        } else if (index > 5 && isStartOfTrainingGroup(index)) {
+          gapBefore = GROUP_VISUAL_GAP;
+        } else {
+          gapBefore = CHARACTER_VISUAL_GAP;
+        }
+      }
+
+      x += gapBefore;
+
+      timeline.push({
+        index,
+        character,
+        x,
+        width: CHARACTER_VISUAL_WIDTH,
+      });
+
+      x += CHARACTER_VISUAL_WIDTH;
+    });
+
+    visualTimeline = timeline;
+    totalVisualWidth = Math.max(0, x);
+
+    return timeline;
+  }
+
+  function isStartOfTrainingGroup(index) {
+    if (index < 5 || index >= expectedCharacters.length - 1) {
+      return false;
+    }
+
+    const info = getGroupCharacterInfo(index);
+
+    return info.itemIndex === 0 && info.characterIndex === 0;
+  }
+
+  function getDuration() {
+    if (!totalUnits) {
+      return 1;
+    }
+
+    return Math.max(1, totalUnits * getDitMilliseconds());
+  }
 
   function getElapsedUnits() {
     const dit = getDitMilliseconds();
@@ -834,61 +567,518 @@
     return Math.max(0, elapsed / dit);
   }
 
-  function getProcessedCountFromTime() {
-    if (!characterTiming.length) {
-      return 0;
+  function getTimelinePosition() {
+    return Math.max(0, Math.min(totalUnits, getElapsedUnits()));
+  }
+
+  function getSynchronizedCharacterIndex(units) {
+    if (!characterTimeline.length) {
+      return -1;
     }
 
-    const units = getElapsedUnits();
+    let index = -1;
 
-    let count = 0;
-
-    for (const item of characterTiming) {
-      if (units >= item.endUnits) {
-        count = Math.max(count, item.index + 1);
+    for (let i = 0; i < characterTimeline.length; i++) {
+      if (units >= characterTimeline[i].startUnits) {
+        index = i;
+      } else {
+        break;
       }
     }
 
-    return Math.min(count, expectedCharacters.length);
+    return index;
   }
 
-  function updateProcessedCount() {
-    const calculated = getProcessedCountFromTime();
+  function updateSynchronizedState() {
+    const units = getTimelinePosition();
+    const index = getSynchronizedCharacterIndex(units);
 
-    if (calculated > processedCount) {
-      processedCount = calculated;
+    currentTimelineIndex = index;
+
+    if (index < 0) {
+      visibleCharacterCount = 0;
+      return;
     }
 
-    if (currentExpectedIndex < processedCount) {
-      currentExpectedIndex = processedCount;
+    visibleCharacterCount = Math.min(index + 1, expectedCharacters.length);
+  }
+
+  function ensureSolutionStyles() {
+    if (document.getElementById("cwtype-solution-runtime-style")) {
+      return;
+    }
+
+    const style = document.createElement("style");
+
+    style.id = "cwtype-solution-runtime-style";
+
+    style.textContent = `
+      .cwtype-solution {
+        white-space: nowrap;
+      }
+
+      .cwtype-solution-character {
+        display: inline-block;
+        min-width: 0.72em;
+        text-align: center;
+        line-height: 1.1;
+      }
+
+      .cwtype-solution-character.correct {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .cwtype-solution-character.wrong,
+      .cwtype-solution-character.missing {
+        color: red;
+        text-decoration-line: underline;
+        text-decoration-color: red;
+        text-decoration-thickness: 2px;
+        text-underline-offset: 3px;
+      }
+
+      .cwtype-solution-character-gap {
+        display: inline-block;
+        width: 0;
+      }
+
+      .cwtype-solution-group-gap {
+        display: inline-block;
+        width: 1.35em;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function createSolutionCharacter(expected, typed, visible) {
+    const element = document.createElement("span");
+
+    element.className = "cwtype-solution-character";
+
+    if (!visible) {
+      element.textContent = "";
+      return element;
+    }
+
+    if (typed === null || typed === "") {
+      element.textContent = "_";
+      element.classList.add("missing");
+      element.title = "Erwartet: " + expected;
+      return element;
+    }
+
+    element.textContent = String(typed);
+
+    if (String(typed).toUpperCase() === String(expected).toUpperCase()) {
+      element.classList.add("correct");
+      return element;
+    }
+
+    element.classList.add("wrong");
+    element.title = "Erwartet: " + expected;
+
+    return element;
+  }
+
+  function createSolutionRange(startIndex, endIndex) {
+    const container = document.createElement("span");
+
+    for (let index = startIndex; index < endIndex; index++) {
+      const expected = expectedCharacters[index];
+      const typed = typedSequence[index];
+      const visible = index < visibleCharacterCount;
+
+      container.appendChild(createSolutionCharacter(expected, typed, visible));
+
+      if (index < endIndex - 1) {
+        const gap = document.createElement("span");
+
+        gap.className = "cwtype-solution-character-gap";
+        gap.textContent = "";
+
+        container.appendChild(gap);
+      }
+    }
+
+    return container;
+  }
+
+  function updateSolution() {
+    if (!solutionElement) {
+      return;
+    }
+
+    if (showSolutionButton?.dataset.active !== "true") {
+      solutionElement.hidden = true;
+      return;
+    }
+
+    solutionElement.hidden = false;
+    solutionElement.replaceChildren();
+
+    if (!expectedCharacters.length) {
+      return;
+    }
+
+    const visibleCount = Math.min(
+      visibleCharacterCount,
+      expectedCharacters.length,
+    );
+
+    if (visibleCount <= 0) {
+      return;
+    }
+
+    const vvvEnd = Math.min(visibleCount, 3);
+
+    if (vvvEnd > 0) {
+      solutionElement.appendChild(createSolutionRange(0, vvvEnd));
+    }
+
+    if (visibleCount > 3) {
+      appendSolutionGroupGap();
+    }
+
+    if (visibleCount > 3) {
+      const kaEnd = Math.min(visibleCount, 5);
+
+      solutionElement.appendChild(createSolutionRange(3, kaEnd));
+    }
+
+    let globalIndex = 5;
+
+    currentGroups.forEach((group) => {
+      let characterCount = 0;
+
+      group.forEach((item) => {
+        characterCount += Array.from(String(item)).length;
+      });
+
+      const groupStart = globalIndex;
+      const groupEnd = globalIndex + characterCount;
+
+      globalIndex = groupEnd;
+
+      if (visibleCount <= groupStart) {
+        return;
+      }
+
+      appendSolutionGroupGap();
+
+      const end = Math.min(visibleCount, groupEnd);
+
+      solutionElement.appendChild(createSolutionRange(groupStart, end));
+    });
+
+    const plusIndex = expectedCharacters.length - 1;
+
+    if (visibleCount > plusIndex) {
+      appendSolutionGroupGap();
+
+      solutionElement.appendChild(
+        createSolutionRange(plusIndex, plusIndex + 1),
+      );
+    }
+  }
+
+  function appendSolutionGroupGap() {
+    const gap = document.createElement("span");
+
+    gap.className = "cwtype-solution-group-gap";
+    gap.textContent = " ";
+
+    solutionElement.appendChild(gap);
+  }
+
+  function showSolution() {
+    if (!solutionElement) {
+      return;
+    }
+
+    if (showSolutionButton) {
+      showSolutionButton.dataset.active = "true";
     }
 
     updateSolution();
   }
 
-  function getCurrentTypingIndex() {
-    if (!characterTiming.length) {
-      return -1;
+  function toggleSolution() {
+    if (!solutionElement) {
+      return;
     }
 
-    const units = getElapsedUnits();
+    const active = showSolutionButton?.dataset.active === "true";
 
-    for (const item of characterTiming) {
-      if (
-        units >= item.startUnits &&
-        units < item.endUnits &&
-        item.index < expectedCharacters.length
-      ) {
-        return item.index;
+    if (active) {
+      if (showSolutionButton) {
+        showSolutionButton.dataset.active = "false";
       }
+
+      solutionElement.hidden = true;
+      return;
     }
 
-    return -1;
+    showSolution();
   }
 
-  /* =========================================================
-     KEYBOARD INPUT
-     ========================================================= */
+  function resetSolution() {
+    morseInput = "";
+
+    if (characterTimer !== null) {
+      clearTimeout(characterTimer);
+      characterTimer = null;
+    }
+
+    currentTimelineIndex = -1;
+    visibleCharacterCount = 0;
+    typedSequence = expectedCharacters.map(() => null);
+
+    if (showSolutionButton) {
+      showSolutionButton.dataset.active = "false";
+    }
+
+    if (solutionElement) {
+      solutionElement.hidden = true;
+      solutionElement.replaceChildren();
+    }
+  }
+
+  function createCharacterElement(character, index) {
+    const element = document.createElement("span");
+
+    element.className = "cwtype-character";
+    element.dataset.index = String(index);
+    element.textContent = String(character);
+
+    element.style.position = "absolute";
+    element.style.top = "50%";
+    element.style.width = `${CHARACTER_VISUAL_WIDTH}px`;
+    element.style.height = "1em";
+    element.style.textAlign = "center";
+    element.style.transform = "translateY(-50%)";
+    element.style.lineHeight = "1";
+    element.style.whiteSpace = "nowrap";
+
+    return element;
+  }
+
+  function createTrack() {
+    if (!track) {
+      throw new Error("cwtype-track nicht gefunden.");
+    }
+
+    track.replaceChildren();
+
+    currentGroups = createTrainingGroups();
+
+    buildExpectedCharacters();
+    buildCharacterTimeline();
+    buildVisualTimeline();
+    resetSolution();
+
+    const line = document.createElement("div");
+
+    line.className = "cwtype-line";
+    line.style.position = "absolute";
+    line.style.top = "0";
+    line.style.left = "0";
+    line.style.height = "100%";
+    line.style.width = `${totalVisualWidth}px`;
+    line.style.whiteSpace = "nowrap";
+
+    visualTimeline.forEach((visualItem) => {
+      const element = createCharacterElement(
+        visualItem.character,
+        visualItem.index,
+      );
+
+      element.style.left = `${visualItem.x}px`;
+      line.appendChild(element);
+    });
+
+    track.appendChild(line);
+
+    if (showSolutionButton) {
+      showSolutionButton.disabled = expectedCharacters.length === 0;
+
+      showSolutionButton.dataset.active = "false";
+    }
+
+    if (solutionElement) {
+      solutionElement.hidden = true;
+    }
+
+    return line;
+  }
+
+  function layout() {
+    if (!laufband || !marker) {
+      return;
+    }
+
+    const band = laufband.getBoundingClientRect();
+    const markerRect = marker.getBoundingClientRect();
+
+    markerX = markerRect.left - band.left + markerRect.width / 2;
+  }
+
+  function getVisualXForUnits(units) {
+    if (!characterTimeline.length || !visualTimeline.length) {
+      return 0;
+    }
+
+    if (units <= characterTimeline[0].startUnits) {
+      return visualTimeline[0].x;
+    }
+
+    const lastTimeline = characterTimeline[characterTimeline.length - 1];
+
+    const lastVisual = visualTimeline[visualTimeline.length - 1];
+
+    if (units >= lastTimeline.endUnits) {
+      return lastVisual.x;
+    }
+
+    const index = getSynchronizedCharacterIndex(units);
+
+    if (index < 0) {
+      return visualTimeline[0].x;
+    }
+
+    const current = characterTimeline[index];
+    const visualCurrent = visualTimeline[index];
+
+    if (index >= characterTimeline.length - 1) {
+      return visualCurrent.x;
+    }
+
+    const next = characterTimeline[index + 1];
+    const visualNext = visualTimeline[index + 1];
+
+    const interval = Math.max(0.0001, next.startUnits - current.startUnits);
+
+    const progress = Math.max(
+      0,
+      Math.min(1, (units - current.startUnits) / interval),
+    );
+
+    return visualCurrent.x + (visualNext.x - visualCurrent.x) * progress;
+  }
+
+  function setTrackPositionForUnits(units) {
+    const line = track?.querySelector(".cwtype-line");
+
+    if (!line) {
+      return;
+    }
+
+    const visualX = getVisualXForUnits(units);
+    const x = markerX - visualX - CHARACTER_VISUAL_WIDTH / 2;
+
+    line.style.left = `${x}px`;
+  }
+
+  function setTrackAtStart() {
+    setTrackPositionForUnits(0);
+  }
+
+  function setTrackAtEnd() {
+    setTrackPositionForUnits(totalUnits);
+  }
+
+  function stopAnimation() {
+    if (animationFrame !== null) {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = null;
+    }
+  }
+
+  function animate(timestamp) {
+    if (!running || paused) {
+      return;
+    }
+
+    elapsed = timestamp - startTime;
+
+    if (elapsed < 0) {
+      elapsed = 0;
+    }
+
+    if (elapsed >= duration) {
+      elapsed = duration;
+
+      setTrackAtEnd();
+
+      currentTimelineIndex = expectedCharacters.length - 1;
+
+      visibleCharacterCount = expectedCharacters.length;
+
+      updateSolution();
+      finish();
+
+      return;
+    }
+
+    const units = getTimelinePosition();
+
+    setTrackPositionForUnits(units);
+    updateSynchronizedState();
+    updateSolution();
+
+    animationFrame = requestAnimationFrame(animate);
+  }
+
+  async function ensureAudio() {
+    if (typeof INCWAudio === "undefined") {
+      return false;
+    }
+
+    if (typeof INCWAudio.start !== "function") {
+      return false;
+    }
+
+    try {
+      const audio = await INCWAudio.start();
+
+      return !!audio && audio.state === "running";
+    } catch (error) {
+      console.error("Audio:", error);
+      return false;
+    }
+  }
+
+  async function toneStart() {
+    const ready = await ensureAudio();
+
+    if (!ready) {
+      return;
+    }
+
+    try {
+      INCWAudio.tone(
+        getToneFrequency(),
+        getDitMilliseconds() / 1000,
+        getVolume(),
+      );
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  function toneStop() {
+    if (
+      typeof INCWAudio !== "undefined" &&
+      typeof INCWAudio.stop === "function"
+    ) {
+      try {
+        INCWAudio.stop();
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
 
   function addMorseElement(element) {
     if (element !== "." && element !== "-") {
@@ -906,7 +1096,6 @@
     const character = MORSE_REVERSE[morseInput] || "?";
 
     addTypedCharacter(character);
-
     morseInput = "";
   }
 
@@ -943,15 +1132,17 @@
       return;
     }
 
-    const index = getCurrentTypingIndex();
+    const index = currentTimelineIndex;
 
     if (index < 0 || index >= expectedCharacters.length) {
       return;
     }
 
-    typedSequence[index] = String(character);
+    if (typedSequence[index] !== null) {
+      return;
+    }
 
-    currentExpectedIndex = Math.max(currentExpectedIndex, index + 1);
+    typedSequence[index] = String(character);
 
     updateSolution();
   }
@@ -968,12 +1159,13 @@
     }
 
     if (event.ctrlKey) {
+      ignoreSpaceKeyUp = true;
+
       if (keyDown) {
         finishKeyStroke();
       }
 
       togglePause();
-
       return;
     }
 
@@ -987,7 +1179,6 @@
 
     if (characterTimer !== null) {
       clearTimeout(characterTimer);
-
       characterTimer = null;
     }
 
@@ -1003,6 +1194,11 @@
     }
 
     event.preventDefault();
+
+    if (ignoreSpaceKeyUp) {
+      ignoreSpaceKeyUp = false;
+      return;
+    }
 
     if (event.ctrlKey || !keyDown) {
       return;
@@ -1024,7 +1220,7 @@
     }
 
     finishMorseCharacter();
-    updateProcessedCount();
+    updateSynchronizedState();
 
     stop();
     showSolution();
@@ -1038,456 +1234,6 @@
     }
   }
 
-  window.addEventListener("keydown", handleSpaceDown);
-
-  window.addEventListener("keyup", handleSpaceUp);
-
-  window.addEventListener("keydown", handleControlX);
-
-  window.addEventListener("blur", handleWindowBlur);
-
-  /* =========================================================
-     SOLUTION
-     ========================================================= */
-
-  function ensureSolutionStyles() {
-    if (document.getElementById("cwtype-solution-runtime-style")) {
-      return;
-    }
-
-    const style = document.createElement("style");
-
-    style.id = "cwtype-solution-runtime-style";
-
-    style.textContent = `
-      .cwtype-solution {
-        white-space: nowrap;
-      }
-
-      .cwtype-solution-character {
-        display: inline-block;
-        min-width: 0.72em;
-        text-align: center;
-        line-height: 1.1;
-      }
-
-      .cwtype-solution-character.wrong,
-      .cwtype-solution-character.missing {
-        color: #c00;
-        text-decoration-line: underline;
-        text-decoration-color: #c00;
-        text-decoration-thickness: 2px;
-        text-underline-offset: 3px;
-      }
-
-      .cwtype-solution-character-gap {
-        display: inline-block;
-        width: 0.32em;
-      }
-
-      .cwtype-solution-group-gap {
-        display: inline-block;
-        width: 0.9em;
-      }
-    `;
-
-    document.head.appendChild(style);
-  }
-
-  function createSolutionCharacter(expected, typed) {
-    const element = document.createElement("span");
-
-    element.className = "cwtype-solution-character";
-
-    if (typed === null || typed === undefined || typed === "") {
-      element.textContent = "_";
-      element.classList.add("missing");
-
-      element.title = "Nicht getastet – erwartet: " + expected;
-
-      return element;
-    }
-
-    element.textContent = String(typed);
-
-    if (String(typed).toUpperCase() === String(expected).toUpperCase()) {
-      return element;
-    }
-
-    element.classList.add("wrong");
-
-    element.title = "Erwartet: " + expected;
-
-    return element;
-  }
-
-  function createSolutionRange(startIndex, endIndex) {
-    const container = document.createElement("span");
-
-    for (let index = startIndex; index < endIndex; index++) {
-      container.appendChild(
-        createSolutionCharacter(
-          expectedCharacters[index],
-          typedSequence[index],
-        ),
-      );
-
-      if (index < endIndex - 1) {
-        const gap = document.createElement("span");
-
-        gap.className = "cwtype-solution-character-gap";
-
-        gap.textContent = " ";
-
-        container.appendChild(gap);
-      }
-    }
-
-    return container;
-  }
-
-  function getProcessedTrainingGroups() {
-    const result = [];
-
-    let globalIndex = 5;
-
-    currentGroups.forEach((group, groupIndex) => {
-      const groupStart = globalIndex;
-
-      let count = 0;
-
-      group.forEach((item) => {
-        count += Array.from(String(item)).length;
-      });
-
-      const groupEnd = groupStart + count;
-
-      if (processedCount > groupStart) {
-        result.push({
-          groupIndex,
-          startIndex: groupStart,
-          endIndex: Math.min(groupEnd, processedCount),
-        });
-      }
-
-      globalIndex = groupEnd;
-    });
-
-    return result;
-  }
-
-  function updateSolution() {
-    if (!solutionElement) {
-      return;
-    }
-
-    solutionElement.replaceChildren();
-
-    if (showSolutionButton?.dataset.active !== "true") {
-      solutionElement.hidden = true;
-      return;
-    }
-
-    solutionElement.hidden = false;
-
-    if (processedCount <= 0) {
-      return;
-    }
-
-    const fixedCount = Math.min(processedCount, 5);
-
-    if (fixedCount > 0) {
-      solutionElement.appendChild(createSolutionRange(0, fixedCount));
-    }
-
-    const groups = getProcessedTrainingGroups();
-
-    if (fixedCount > 0 && groups.length > 0) {
-      const gap = document.createElement("span");
-
-      gap.className = "cwtype-solution-group-gap";
-
-      gap.textContent = "   ";
-
-      solutionElement.appendChild(gap);
-    }
-
-    groups.forEach((group, index) => {
-      solutionElement.appendChild(
-        createSolutionRange(group.startIndex, group.endIndex),
-      );
-
-      if (index < groups.length - 1) {
-        const gap = document.createElement("span");
-
-        gap.className = "cwtype-solution-group-gap";
-
-        gap.textContent = "   ";
-
-        solutionElement.appendChild(gap);
-      }
-    });
-  }
-
-  function showSolution() {
-    if (!solutionElement) {
-      return;
-    }
-
-    if (showSolutionButton) {
-      showSolutionButton.dataset.active = "true";
-    }
-
-    updateSolution();
-  }
-
-  function toggleSolution() {
-    if (!solutionElement) {
-      return;
-    }
-
-    const active = showSolutionButton?.dataset.active === "true";
-
-    if (active) {
-      if (showSolutionButton) {
-        showSolutionButton.dataset.active = "false";
-      }
-
-      solutionElement.hidden = true;
-
-      return;
-    }
-
-    showSolution();
-  }
-
-  function resetSolution() {
-    morseInput = "";
-
-    if (characterTimer !== null) {
-      clearTimeout(characterTimer);
-
-      characterTimer = null;
-    }
-
-    processedCount = 0;
-    currentExpectedIndex = 0;
-
-    if (showSolutionButton) {
-      showSolutionButton.dataset.active = "false";
-    }
-
-    if (solutionElement) {
-      solutionElement.hidden = true;
-      solutionElement.replaceChildren();
-    }
-  }
-
-  /* =========================================================
-     VISUAL TRACK
-     ========================================================= */
-
-  function createGroupElement(group) {
-    const groupElement = document.createElement("span");
-
-    groupElement.className = "cwtype-group";
-
-    groupElement.style.display = "inline-flex";
-
-    groupElement.style.alignItems = "center";
-
-    groupElement.style.verticalAlign = "middle";
-
-    groupElement.style.whiteSpace = "nowrap";
-
-    groupElement.style.gap = "0.32em";
-
-    group.forEach((item) => {
-      const character = document.createElement("span");
-
-      character.className = "cwtype-character";
-
-      character.textContent = String(item);
-
-      character.style.display = "inline-block";
-
-      character.style.lineHeight = "1";
-
-      character.title = isAbbreviationMethod() ? String(item) : "";
-
-      groupElement.appendChild(character);
-    });
-
-    return groupElement;
-  }
-
-  function appendFixedGap(parent, className, width = "0.8em") {
-    const gap = document.createElement("span");
-
-    gap.className = className;
-
-    gap.style.width = width;
-
-    gap.style.flex = `0 0 ${width}`;
-
-    parent.appendChild(gap);
-  }
-
-  function createTrack() {
-    if (!track) {
-      throw new Error("cwtype-track not found.");
-    }
-
-    track.replaceChildren();
-
-    currentGroups = createTrainingGroups();
-
-    currentTiming = buildTimingSequence(currentGroups);
-
-    buildExpectedSequence();
-
-    characterTiming = buildCharacterTiming();
-
-    resetSolution();
-
-    const line = document.createElement("div");
-
-    line.className = "cwtype-line";
-
-    line.style.position = "absolute";
-
-    line.style.top = "50%";
-
-    line.style.transform = "translateY(-50%)";
-
-    line.style.display = "flex";
-
-    line.style.alignItems = "center";
-
-    line.style.whiteSpace = "nowrap";
-
-    const vvv = document.createElement("span");
-
-    vvv.className = "cwtype-vvv";
-
-    vvv.textContent = "VVV";
-
-    line.appendChild(vvv);
-
-    appendFixedGap(line, "cwtype-gap cwtype-gap-vvv");
-
-    const ka = document.createElement("span");
-
-    ka.className = "cwtype-ka";
-
-    ka.textContent = "KA";
-
-    line.appendChild(ka);
-
-    appendFixedGap(line, "cwtype-gap cwtype-gap-ka");
-
-    currentGroups.forEach((group, index) => {
-      line.appendChild(createGroupElement(group));
-
-      if (index < currentGroups.length - 1) {
-        appendFixedGap(line, "cwtype-group-gap", "0.9em");
-      }
-    });
-
-    appendFixedGap(line, "cwtype-gap cwtype-gap-plus");
-
-    const plus = document.createElement("span");
-
-    plus.className = "cwtype-plus";
-
-    plus.textContent = "+";
-
-    line.appendChild(plus);
-
-    track.appendChild(line);
-
-    if (showSolutionButton) {
-      showSolutionButton.disabled = expectedCharacters.length === 0;
-
-      showSolutionButton.dataset.active = "false";
-    }
-
-    if (solutionElement) {
-      solutionElement.hidden = true;
-    }
-
-    return line;
-  }
-
-  /* =========================================================
-     POSITION
-     ========================================================= */
-
-  function layout(line) {
-    if (!laufband || !marker) {
-      return;
-    }
-
-    const band = laufband.getBoundingClientRect();
-
-    const markerRect = marker.getBoundingClientRect();
-
-    const markerX = markerRect.left - band.left + markerRect.width / 2;
-
-    const width = line.getBoundingClientRect().width;
-
-    startX = markerX;
-    endX = markerX - width;
-  }
-
-  function setX(x) {
-    const line = track?.querySelector(".cwtype-line");
-
-    if (line) {
-      line.style.left = `${x}px`;
-    }
-  }
-
-  /* =========================================================
-     ANIMATION
-     ========================================================= */
-
-  function stopAnimation() {
-    if (animationFrame !== null) {
-      cancelAnimationFrame(animationFrame);
-
-      animationFrame = null;
-    }
-  }
-
-  function animate(timestamp) {
-    if (!running || paused) {
-      return;
-    }
-
-    elapsed = timestamp - startTime;
-
-    const progress = Math.min(1, elapsed / duration);
-
-    const x = startX + (endX - startX) * progress;
-
-    setX(x);
-
-    updateProcessedCount();
-
-    if (progress >= 1) {
-      setX(endX);
-      finish();
-      return;
-    }
-
-    animationFrame = requestAnimationFrame(animate);
-  }
-
-  /* =========================================================
-     BUTTONS
-     ========================================================= */
-
   function updateButtons(active) {
     if (startButton) {
       startButton.disabled = active;
@@ -1495,18 +1241,13 @@
 
     if (pauseButton) {
       pauseButton.disabled = !active;
-
-      pauseButton.textContent = "⏸ Pause";
+      pauseButton.textContent = paused ? "▶ Resume" : "⏸ Pause";
     }
 
     if (stopButton) {
       stopButton.disabled = !active;
     }
   }
-
-  /* =========================================================
-     REBUILD
-     ========================================================= */
 
   function rebuild() {
     stopAnimation();
@@ -1530,81 +1271,68 @@
     track.style.visibility = "hidden";
 
     try {
-      const line = createTrack();
+      createTrack();
 
       requestAnimationFrame(() => {
-        layout(line);
-
-        setX(startX);
+        layout();
+        setTrackAtStart();
 
         duration = getDuration();
 
         track.style.visibility = "visible";
-
         updateButtons(false);
       });
     } catch (error) {
-      console.error("CW Type rebuild error:", error);
-
+      console.error("CW rebuild:", error);
       track.style.visibility = "visible";
     }
   }
-
-  /* =========================================================
-     START
-     ========================================================= */
 
   async function start() {
     if (running) {
       return;
     }
 
-    const audioReady = await ensureAudio();
-
-    if (!audioReady) {
-      console.warn("CW audio could not be started.");
-    }
+    await ensureAudio();
 
     stopAnimation();
 
     track.style.visibility = "hidden";
 
     try {
-      const line = createTrack();
+      createTrack();
 
       requestAnimationFrame(() => {
-        layout(line);
+        layout();
 
         duration = getDuration();
-
         elapsed = 0;
 
-        processedCount = 0;
-        currentExpectedIndex = 0;
+        currentTimelineIndex = -1;
+        visibleCharacterCount = 0;
+
+        typedSequence = expectedCharacters.map(() => null);
 
         running = true;
         paused = false;
 
-        setX(startX);
+        setTrackAtStart();
 
         startTime = performance.now();
 
         track.style.visibility = "visible";
 
         updateButtons(true);
+        updateSynchronizedState();
+        updateSolution();
 
         animationFrame = requestAnimationFrame(animate);
       });
     } catch (error) {
-      console.error("CW Type start error:", error);
-
+      console.error("CW start:", error);
       track.style.visibility = "visible";
     }
   }
-
-  /* =========================================================
-     PAUSE / RESUME
-     ========================================================= */
 
   function togglePause() {
     if (!running) {
@@ -1612,12 +1340,13 @@
     }
 
     if (!paused) {
-      updateProcessedCount();
+      elapsed = Math.max(0, Math.min(duration, performance.now() - startTime));
+
+      updateSynchronizedState();
+      setTrackPositionForUnits(getTimelinePosition());
 
       paused = true;
-
       toneStop();
-
       stopAnimation();
 
       if (pauseButton) {
@@ -1638,13 +1367,12 @@
     animationFrame = requestAnimationFrame(animate);
   }
 
-  /* =========================================================
-     STOP
-     ========================================================= */
-
   function stop() {
     if (running) {
-      updateProcessedCount();
+      elapsed = Math.max(0, Math.min(duration, performance.now() - startTime));
+
+      updateSynchronizedState();
+      setTrackPositionForUnits(getTimelinePosition());
     }
 
     stopAnimation();
@@ -1660,23 +1388,17 @@
 
     finishMorseCharacter();
 
-    elapsed = 0;
-
-    setX(startX);
-
-    updateButtons(false);
-
+    updateSynchronizedState();
     updateSolution();
+    updateButtons(false);
   }
-
-  /* =========================================================
-     FINISH
-     ========================================================= */
 
   function finish() {
-    processedCount = expectedCharacters.length;
+    elapsed = duration;
 
-    currentExpectedIndex = expectedCharacters.length;
+    currentTimelineIndex = expectedCharacters.length - 1;
+
+    visibleCharacterCount = expectedCharacters.length;
 
     stopAnimation();
 
@@ -1684,8 +1406,7 @@
     paused = false;
 
     toneStop();
-
-    setX(endX);
+    setTrackAtEnd();
 
     if (keyDown) {
       finishKeyStroke();
@@ -1694,13 +1415,44 @@
     finishMorseCharacter();
 
     updateButtons(false);
-
     updateSolution();
   }
 
-  /* =========================================================
-     METHOD / LESSON
-     ========================================================= */
+  function rebuildMethods(selectId = null) {
+    if (!methodSelect) {
+      return;
+    }
+
+    const allMethods = getAllMethods();
+    const previousId = selectId || currentMethod?.id || null;
+
+    methodSelect.replaceChildren();
+
+    allMethods.forEach((method) => {
+      const option = document.createElement("option");
+
+      option.value = method.id;
+      option.textContent = method.name || method.id;
+
+      methodSelect.appendChild(option);
+    });
+
+    if (!allMethods.length) {
+      currentMethod = null;
+      abbreviationData = [];
+
+      populateLessons();
+      rebuild();
+
+      return;
+    }
+
+    const exists = allMethods.some((method) => method.id === previousId);
+
+    methodSelect.value = exists ? previousId : allMethods[0].id;
+
+    selectMethod();
+  }
 
   async function selectMethod() {
     const method = getAllMethods().find(
@@ -1720,18 +1472,12 @@
       await loadAbbreviations();
     } catch (error) {
       console.error(error);
-
       abbreviationData = [];
-
-      populateLessons();
-      rebuild();
-
-      return;
     }
 
     populateLessons();
 
-    if (lessonSelect.options.length) {
+    if (lessonSelect?.options.length) {
       lessonSelect.value = "1";
     }
 
@@ -1740,7 +1486,6 @@
 
   function selectLesson() {
     const value = Number(lessonSelect.value);
-
     const count = getLessonCount();
 
     currentLesson =
@@ -1751,25 +1496,58 @@
     rebuild();
   }
 
-  /* =========================================================
-     EVENTS
-     ========================================================= */
-
-  customFileInput?.addEventListener("change", async () => {
-    const file = customFileInput.files?.[0];
-
-    if (!file) {
+  function renderCustomFiles() {
+    if (!customFilesElement) {
       return;
     }
 
-    try {
-      await addCustomFile(file);
-    } catch (error) {
-      console.error("CSV error:", error);
-    }
+    customFilesElement.replaceChildren();
 
-    customFileInput.value = "";
-  });
+    customFiles.forEach((file) => {
+      const row = document.createElement("div");
+      const name = document.createElement("span");
+      const button = document.createElement("button");
+
+      name.textContent = file.name;
+
+      button.type = "button";
+      button.textContent = "Remove";
+
+      button.addEventListener("click", () => {
+        customFiles = customFiles.filter((item) => item.id !== file.id);
+
+        renderCustomFiles();
+        rebuildMethods();
+      });
+
+      row.append(name, button);
+      customFilesElement.appendChild(row);
+    });
+  }
+
+  async function addCustomFile(file) {
+    const data = parseCSV(await file.text());
+
+    const id =
+      "custom-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+
+    customFiles.push({
+      id,
+      name: file.name.replace(/\.csv$/i, ""),
+      data,
+    });
+
+    renderCustomFiles();
+    rebuildMethods(id);
+  }
+
+  window.addEventListener("keydown", handleSpaceDown);
+
+  window.addEventListener("keyup", handleSpaceUp);
+
+  window.addEventListener("keydown", handleControlX);
+
+  window.addEventListener("blur", handleWindowBlur);
 
   methodSelect?.addEventListener("change", selectMethod);
 
@@ -1801,15 +1579,27 @@
 
   showSolutionButton?.addEventListener("click", toggleSolution);
 
+  customFileInput?.addEventListener("change", async () => {
+    const file = customFileInput.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      await addCustomFile(file);
+    } catch (error) {
+      console.error("CSV:", error);
+    }
+
+    customFileInput.value = "";
+  });
+
   window.addEventListener("resize", () => {
     if (!running) {
       rebuild();
     }
   });
-
-  /* =========================================================
-     INIT
-     ========================================================= */
 
   async function init() {
     ensureSolutionStyles();
@@ -1820,23 +1610,16 @@
       });
 
       if (!response.ok) {
-        throw new Error(
-          "text/index.json konnte nicht geladen werden: HTTP " +
-            response.status,
-        );
+        throw new Error("text/index.json konnte nicht geladen werden.");
       }
 
       const data = await response.json();
 
-      if (!data || !Array.isArray(data.methods)) {
-        throw new Error("Ungültiges text/index.json.");
-      }
-
-      methods = data.methods.slice();
+      methods = Array.isArray(data.methods) ? data.methods.slice() : [];
 
       rebuildMethods();
     } catch (error) {
-      console.error("CW Type konnte nicht gestartet werden:", error);
+      console.error("CW Type Init:", error);
 
       if (track) {
         track.style.visibility = "visible";

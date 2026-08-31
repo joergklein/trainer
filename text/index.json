@@ -36,6 +36,18 @@
       "name": "Q-Groups",
       "source": "q-groups.csv",
       "type": "q-groups"
+    },
+    {
+      "id": "word_de",
+      "name": "Word_de",
+      "source": "word_de.csv",
+      "type": "word_de"
+    },
+    {
+      "id": "word_en",
+      "name": "Word_en",
+      "source": "word_en.csv",
+      "type": "word_en"
     }
   ]
 }
