@@ -55,7 +55,7 @@
     2: "..---",
     3: "...--",
     4: "....-",
-    5: ".....",
+    5: "-....",
     6: "-....",
     7: "--...",
     8: "---..",
@@ -120,18 +120,58 @@
   let duration = 1;
   let markerX = 0;
 
+  /*
+   * ==========================================================
+   * MORSE-EINGABE
+   * ==========================================================
+   *
+   * WICHTIG:
+   *
+   * Ein Tastendruck erzeugt GENAU EIN Morse-Element.
+   *
+   * Die Länge des Tastendrucks entscheidet:
+   *
+   *     kurz  -> .
+   *     lang  -> -
+   *
+   * Danach wird ausschließlich die PAUSE zwischen den
+   * Tastendrücken benutzt, um das Zeichen abzuschließen.
+   *
+   * Dadurch wird
+   *
+   *     . . . . .
+   *
+   * niemals automatisch zu
+   *
+   *     ...
+   *
+   * für ein einziges Zeichen zusammengezogen.
+   */
+
   let morseInput = "";
   let keyDown = false;
   let keyDownStarted = 0;
+
   let keyDownCharacterIndex = -1;
+
   let characterTimer = null;
+
   let ignoreSpaceKeyUp = false;
+
+  /*
+   * Der Timer wird etwas später als die normale Morse-
+   * Zeichenlücke ausgelöst.
+   *
+   * Dadurch bekommt ein unmittelbar folgender Dit noch
+   * die Möglichkeit, als eigener Tastendruck registriert
+   * zu werden.
+   */
+  const CHARACTER_FINISH_FACTOR = 3.25;
 
   function getWpm() {
     const value = Number(wpmInput?.value);
-    const result = Number.isFinite(value) && value >= 1 ? value : 12;
 
-    return result;
+    return Number.isFinite(value) && value >= 1 ? value : 12;
   }
 
   function getDitMilliseconds() {
@@ -170,7 +210,10 @@
       groupSize = 5;
     }
 
-    return { groups, groupSize };
+    return {
+      groups,
+      groupSize,
+    };
   }
 
   function morseUnits(character) {
@@ -192,6 +235,12 @@
 
     return units;
   }
+
+  /*
+   * ==========================================================
+   * CSV
+   * ==========================================================
+   */
 
   function parseCSVLine(line) {
     const values = [];
@@ -238,16 +287,26 @@
 
     return lines.slice(1).reduce((result, line) => {
       const values = parseCSVLine(line);
+
       const abbreviation = values[0]?.trim() || "";
       const meaning = values[1]?.trim() || "";
 
       if (abbreviation) {
-        result.push({ abbreviation, meaning });
+        result.push({
+          abbreviation,
+          meaning,
+        });
       }
 
       return result;
     }, []);
   }
+
+  /*
+   * ==========================================================
+   * METHODS
+   * ==========================================================
+   */
 
   function isAbbreviationMethod() {
     return (
@@ -365,6 +424,7 @@
 
       for (let itemIndex = 0; itemIndex < groupSize; itemIndex++) {
         const index = Math.floor(Math.random() * available.length);
+
         group.push(String(available[index]));
       }
 
@@ -373,6 +433,12 @@
 
     return result;
   }
+
+  /*
+   * ==========================================================
+   * SOLUTION
+   * ==========================================================
+   */
 
   function buildSolutionWords() {
     const words = ["VVV", "KA"];
@@ -414,6 +480,7 @@
     }
 
     typedSequence = expectedCharacters.map(() => null);
+
     currentTimelineIndex = -1;
     visibleCharacterCount = 0;
   }
@@ -448,6 +515,12 @@
     };
   }
 
+  /*
+   * ==========================================================
+   * TIMELINE
+   * ==========================================================
+   */
+
   function buildCharacterTimeline() {
     const timeline = [];
     let units = 0;
@@ -475,6 +548,7 @@
     });
 
     characterTimeline = timeline;
+
     totalUnits = timeline.length ? timeline[timeline.length - 1].endUnits : 0;
 
     return timeline;
@@ -556,6 +630,12 @@
       index < 0 ? 0 : Math.min(index + 1, expectedCharacters.length);
   }
 
+  /*
+   * ==========================================================
+   * SOLUTION STYLES
+   * ==========================================================
+   */
+
   function ensureSolutionStyles() {
     if (document.getElementById("cwtype-solution-runtime-style")) {
       return;
@@ -601,13 +681,6 @@
         width: 1.35em;
       }
 
-      /*
-       * Custom-Dateien / Remove
-       *
-       * Die komplette Zeile bekommt dieselbe Box-Behandlung
-       * wie die übrigen UI-Bereiche. Der Button wird nicht
-       * aus dem Rahmen herausgelöst.
-       */
       #custom-files {
         width: 100%;
         box-sizing: border-box;
@@ -676,8 +749,11 @@
 
     if (typed === null || typed === "") {
       element.textContent = "_";
+
       element.classList.add("missing");
+
       element.title = "Erwartet: " + expected;
+
       return element;
     }
 
@@ -685,10 +761,12 @@
 
     if (String(typed).toUpperCase() === String(expected).toUpperCase()) {
       element.classList.add("correct");
+
       return element;
     }
 
     element.classList.add("wrong");
+
     element.title = "Erwartet: " + expected;
 
     return element;
@@ -722,6 +800,7 @@
     const gap = document.createElement("span");
 
     gap.className = "cwtype-solution-group-gap";
+
     gap.textContent = " ";
 
     solutionElement.appendChild(gap);
@@ -789,7 +868,9 @@
 
     if (active) {
       showSolutionButton.dataset.active = "false";
+
       solutionElement.hidden = true;
+
       return;
     }
 
@@ -807,6 +888,7 @@
 
     currentTimelineIndex = -1;
     visibleCharacterCount = 0;
+
     typedSequence = expectedCharacters.map(() => null);
 
     if (showSolutionButton) {
@@ -819,11 +901,19 @@
     }
   }
 
+  /*
+   * ==========================================================
+   * TRACK
+   * ==========================================================
+   */
+
   function createCharacterElement(character, index) {
     const element = document.createElement("span");
 
     element.className = "cwtype-character";
+
     element.dataset.index = String(index);
+
     element.textContent = String(character);
 
     Object.assign(element.style, {
@@ -852,6 +942,7 @@
     buildExpectedCharacters();
     buildCharacterTimeline();
     buildVisualTimeline();
+
     resetSolution();
 
     const line = document.createElement("div");
@@ -893,12 +984,19 @@
     return line;
   }
 
+  /*
+   * ==========================================================
+   * POSITION
+   * ==========================================================
+   */
+
   function layout() {
     if (!laufband || !marker) {
       return;
     }
 
     const band = laufband.getBoundingClientRect();
+
     const markerRect = marker.getBoundingClientRect();
 
     markerX = markerRect.left - band.left + markerRect.width / 2;
@@ -928,6 +1026,7 @@
     }
 
     const current = characterTimeline[index];
+
     const visualCurrent = visualTimeline[index];
 
     if (index >= characterTimeline.length - 1) {
@@ -935,6 +1034,7 @@
     }
 
     const next = characterTimeline[index + 1];
+
     const visualNext = visualTimeline[index + 1];
 
     const interval = Math.max(0.0001, next.startUnits - current.startUnits);
@@ -971,9 +1071,16 @@
     setTrackPositionForUnits(totalUnits);
   }
 
+  /*
+   * ==========================================================
+   * ANIMATION
+   * ==========================================================
+   */
+
   function stopAnimation() {
     if (animationFrame !== null) {
       cancelAnimationFrame(animationFrame);
+
       animationFrame = null;
     }
   }
@@ -995,6 +1102,7 @@
       visibleCharacterCount = expectedCharacters.length;
 
       updateSolution();
+
       finish();
 
       return;
@@ -1003,11 +1111,18 @@
     const units = getTimelinePosition();
 
     setTrackPositionForUnits(units);
+
     updateSynchronizedState();
     updateSolution();
 
     animationFrame = requestAnimationFrame(animate);
   }
+
+  /*
+   * ==========================================================
+   * AUDIO
+   * ==========================================================
+   */
 
   async function ensureAudio() {
     if (
@@ -1023,6 +1138,7 @@
       return !!audio && audio.state === "running";
     } catch (error) {
       console.error("Audio:", error);
+
       return false;
     }
   }
@@ -1056,10 +1172,22 @@
     }
   }
 
+  /*
+   * ==========================================================
+   * EINGABE
+   * ==========================================================
+   */
+
   function addMorseElement(element) {
-    if (element === "." || element === "-") {
-      morseInput += element;
+    if (element !== "." && element !== "-") {
+      return;
     }
+
+    /*
+     * Jeder Tastendruck wird genau einmal
+     * hinzugefügt.
+     */
+    morseInput += element;
   }
 
   function finishMorseCharacter() {
@@ -1069,12 +1197,6 @@
 
     const character = MORSE_REVERSE[morseInput] || "?";
 
-    /*
-     * Die Eingabe wird bewusst an der zuletzt beim
-     * Tastendruck ermittelten Position gespeichert.
-     * Dadurch bleibt die Lösung/Timeline aus Datei 1
-     * unverändert.
-     */
     const targetIndex =
       keyDownCharacterIndex >= 0 ? keyDownCharacterIndex : currentTimelineIndex;
 
@@ -1103,12 +1225,21 @@
     toneStop();
 
     /*
-     * DIT / DAH-Erkennung aus der funktionierenden Datei 2:
+     * Ganz wichtig:
      *
-     * unter 2 Dit-Zeiten = DIT
-     * ab 2 Dit-Zeiten    = DAH
+     * Nur die Dauer dieses EINEN Tastendrucks
+     * entscheidet über Dit oder Dah.
+     *
+     * Bei 12 WPM:
+     *
+     * Dit = 100 ms
+     * Dah = 300 ms
+     *
+     * Alles unter 200 ms ist ein Dit.
      */
-    const element = durationMs >= getDitMilliseconds() * 2 ? "-" : ".";
+    const dit = getDitMilliseconds();
+
+    const element = durationMs >= dit * 2 ? "-" : ".";
 
     addMorseElement(element);
   }
@@ -1116,12 +1247,31 @@
   function scheduleCharacterFinish() {
     if (characterTimer !== null) {
       clearTimeout(characterTimer);
+      characterTimer = null;
     }
+
+    /*
+     * Nicht nach jedem Dit sofort auswerten.
+     *
+     * Erst wenn wirklich keine weitere Taste
+     * kommt, wird das Morsezeichen abgeschlossen.
+     */
+    const delay = getDitMilliseconds() * CHARACTER_FINISH_FACTOR;
 
     characterTimer = window.setTimeout(() => {
       characterTimer = null;
+
+      /*
+       * Falls während des Timers wieder eine Taste
+       * gedrückt wurde, wird hier nichts mehr
+       * zusammengezogen.
+       */
+      if (keyDown) {
+        return;
+      }
+
       finishMorseCharacter();
-    }, getDitMilliseconds() * 3);
+    }, delay);
   }
 
   async function handleSpaceDown(event) {
@@ -1143,6 +1293,7 @@
       }
 
       togglePause();
+
       return;
     }
 
@@ -1155,21 +1306,25 @@
     }
 
     /*
-     * Wie in Datei 2:
-     * Eine eventuell noch laufende Zeichenpause wird
-     * beendet, bevor ein neuer Tastendruck beginnt.
+     * Sobald ein neuer Tastendruck beginnt,
+     * darf der Zeichen-Abschlusstimer des vorherigen
+     * Dits NICHT auslösen.
+     *
+     * Der neue Dit gehört aber zu demselben
+     * Eingabevorgang, sofern keine ausreichende
+     * Zeichenpause vergangen ist.
      */
     if (characterTimer !== null) {
       clearTimeout(characterTimer);
       characterTimer = null;
     }
 
-    /*
-     * Die aktuelle Timeline-Position wird direkt vor
-     * Beginn des Tastendrucks bestimmt.
-     */
     updateSynchronizedState();
 
+    /*
+     * Das Zeichen, das gerade unter der Linie liegt,
+     * wird für diesen Tastendruck reserviert.
+     */
     keyDownCharacterIndex = currentTimelineIndex;
 
     if (
@@ -1202,7 +1357,15 @@
       return;
     }
 
+    /*
+     * Genau EIN Dit/Dah.
+     */
     finishKeyStroke();
+
+    /*
+     * Erst nach dem Loslassen beginnt die
+     * Zeichenpause zu laufen.
+     */
     scheduleCharacterFinish();
   }
 
@@ -1227,10 +1390,22 @@
   function handleWindowBlur() {
     if (keyDown) {
       finishKeyStroke();
+
+      /*
+       * Bei Fensterverlust das gerade begonnene
+       * Morsezeichen ebenfalls sauber abschließen.
+       */
+      scheduleCharacterFinish();
     } else {
       toneStop();
     }
   }
+
+  /*
+   * ==========================================================
+   * BUTTONS
+   * ==========================================================
+   */
 
   function updateButtons(active) {
     if (startButton) {
@@ -1239,6 +1414,7 @@
 
     if (pauseButton) {
       pauseButton.disabled = !active;
+
       pauseButton.textContent = paused ? "▶ Resume" : "⏸ Pause";
     }
 
@@ -1246,6 +1422,12 @@
       stopButton.disabled = !active;
     }
   }
+
+  /*
+   * ==========================================================
+   * REBUILD / START
+   * ==========================================================
+   */
 
   function rebuild() {
     stopAnimation();
@@ -1273,6 +1455,7 @@
 
       requestAnimationFrame(() => {
         layout();
+
         setTrackAtStart();
 
         duration = getDuration();
@@ -1308,15 +1491,19 @@
         duration = getDuration();
 
         elapsed = 0;
+
         currentTimelineIndex = -1;
         visibleCharacterCount = 0;
+
         typedSequence = expectedCharacters.map(() => null);
 
         keyDownCharacterIndex = -1;
+
         morseInput = "";
 
         if (characterTimer !== null) {
           clearTimeout(characterTimer);
+
           characterTimer = null;
         }
 
@@ -1330,6 +1517,7 @@
         track.style.visibility = "visible";
 
         updateButtons(true);
+
         updateSynchronizedState();
         updateSolution();
 
@@ -1430,6 +1618,12 @@
     updateSolution();
   }
 
+  /*
+   * ==========================================================
+   * METHOD SELECT
+   * ==========================================================
+   */
+
   function rebuildMethods(selectId = null) {
     if (!methodSelect) {
       return;
@@ -1445,6 +1639,7 @@
       const option = document.createElement("option");
 
       option.value = method.id;
+
       option.textContent = method.name || method.id;
 
       methodSelect.appendChild(option);
@@ -1510,6 +1705,12 @@
     rebuild();
   }
 
+  /*
+   * ==========================================================
+   * CUSTOM FILES
+   * ==========================================================
+   */
+
   function renderCustomFiles() {
     if (!customFilesElement) {
       return;
@@ -1557,6 +1758,12 @@
     renderCustomFiles();
     rebuildMethods(id);
   }
+
+  /*
+   * ==========================================================
+   * EVENTS
+   * ==========================================================
+   */
 
   window.addEventListener("keydown", handleSpaceDown);
 
@@ -1617,6 +1824,12 @@
       rebuild();
     }
   });
+
+  /*
+   * ==========================================================
+   * INIT
+   * ==========================================================
+   */
 
   async function init() {
     ensureSolutionStyles();
