@@ -49,6 +49,7 @@
     X: "-..-",
     Y: "-.--",
     Z: "--..",
+
     0: "-----",
     1: ".----",
     2: "..---",
@@ -59,6 +60,7 @@
     7: "--...",
     8: "---..",
     9: "----.",
+
     ".": ".-.-.-",
     ",": "--..--",
     "?": "..--..",
@@ -596,6 +598,66 @@
         display: inline-block;
         width: 1.35em;
       }
+
+      /*
+       * Custom-Dateien / Remove
+       *
+       * Die komplette Zeile bekommt dieselbe Box-Behandlung
+       * wie die übrigen UI-Bereiche. Der Button wird nicht
+       * aus dem Rahmen herausgelöst.
+       */
+      #custom-files {
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      #custom-files > div {
+        width: 100%;
+        min-height: 42px;
+        box-sizing: border-box;
+
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+
+        padding: 8px 10px;
+
+        border: 1px solid currentColor;
+        border-radius: 6px;
+
+        margin-top: 8px;
+      }
+
+      #custom-files > div > span {
+        min-width: 0;
+        flex: 1 1 auto;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      #custom-files > div > button {
+        flex: 0 0 auto;
+        box-sizing: border-box;
+
+        min-height: 30px;
+        padding: 5px 12px;
+
+        margin: 0;
+
+        border: 1px solid currentColor;
+        border-radius: 4px;
+
+        background: transparent;
+        color: inherit;
+
+        cursor: pointer;
+      }
+
+      #custom-files > div > button:hover {
+        opacity: 0.8;
+      }
     `;
 
     document.head.appendChild(style);
@@ -835,7 +897,6 @@
     }
 
     const band = laufband.getBoundingClientRect();
-
     const markerRect = marker.getBoundingClientRect();
 
     markerX = markerRect.left - band.left + markerRect.width / 2;
@@ -865,7 +926,6 @@
     }
 
     const current = characterTimeline[index];
-
     const visualCurrent = visualTimeline[index];
 
     if (index >= characterTimeline.length - 1) {
@@ -873,7 +933,6 @@
     }
 
     const next = characterTimeline[index + 1];
-
     const visualNext = visualTimeline[index + 1];
 
     const interval = Math.max(0.0001, next.startUnits - current.startUnits);
@@ -913,7 +972,6 @@
   function stopAnimation() {
     if (animationFrame !== null) {
       cancelAnimationFrame(animationFrame);
-
       animationFrame = null;
     }
   }
@@ -963,7 +1021,6 @@
       return !!audio && audio.state === "running";
     } catch (error) {
       console.error("Audio:", error);
-
       return false;
     }
   }
@@ -1081,22 +1138,6 @@
       return;
     }
 
-    /*
-     * WICHTIG:
-     * Ein vorheriges Morsezeichen muss
-     * abgeschlossen sein, bevor das
-     * nächste Zeichen begonnen wird.
-     *
-     * Sonst würden z.B.
-     *
-     * E = .
-     * E = .
-     * E = .
-     * E = .
-     *
-     * zu "...." zusammenlaufen und
-     * dadurch als H erkannt werden.
-     */
     if (morseInput) {
       if (characterTimer !== null) {
         clearTimeout(characterTimer);
@@ -1144,7 +1185,6 @@
     }
 
     finishKeyStroke();
-
     scheduleCharacterFinish();
   }
 
@@ -1259,7 +1299,6 @@
 
         if (characterTimer !== null) {
           clearTimeout(characterTimer);
-
           characterTimer = null;
         }
 
