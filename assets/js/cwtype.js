@@ -49,7 +49,6 @@
     X: "-..-",
     Y: "-.--",
     Z: "--..",
-
     0: "-----",
     1: ".----",
     2: "..---",
@@ -60,7 +59,6 @@
     7: "--...",
     8: "---..",
     9: "----.",
-
     ".": ".-.-.-",
     ",": "--..--",
     "?": "..--..",
@@ -89,9 +87,9 @@
   const CW_CHARACTER_GAP = 3;
   const CW_WORD_GAP = 7;
 
-  const CHARACTER_VISUAL_WIDTH = 24;
+  const CHARACTER_VISUAL_WIDTH = 20;
   const CHARACTER_VISUAL_GAP = 0;
-  const GROUP_VISUAL_GAP = 24;
+  const GROUP_VISUAL_GAP = 14;
 
   let methods = [];
   let customFiles = [];
@@ -123,6 +121,7 @@
   let morseInput = "";
   let keyDown = false;
   let keyDownStarted = 0;
+  let keyDownCharacterIndex = -1;
   let characterTimer = null;
   let ignoreSpaceKeyUp = false;
 
@@ -482,10 +481,14 @@
     let x = 0;
 
     expectedCharacters.forEach((character, index) => {
-      if (index > 0 && getSolutionWordInfo(index).isFirstCharacter) {
-        x += GROUP_VISUAL_GAP;
-      } else if (index > 0) {
-        x += CHARACTER_VISUAL_GAP;
+      if (index > 0) {
+        const previousInfo = getSolutionWordInfo(index - 1);
+
+        if (previousInfo.isLastCharacter) {
+          x += GROUP_VISUAL_GAP;
+        } else {
+          x += CHARACTER_VISUAL_GAP;
+        }
       }
 
       timeline.push({
@@ -557,6 +560,7 @@
     const style = document.createElement("style");
 
     style.id = "cwtype-solution-runtime-style";
+
     style.textContent = `
       .cwtype-solution {
         white-space: nowrap;
@@ -730,6 +734,7 @@
 
   function resetSolution() {
     morseInput = "";
+    keyDownCharacterIndex = -1;
 
     if (characterTimer !== null) {
       clearTimeout(characterTimer);
@@ -805,6 +810,7 @@
       );
 
       element.style.left = `${visualItem.x}px`;
+
       line.appendChild(element);
     });
 
@@ -812,6 +818,7 @@
 
     if (showSolutionButton) {
       showSolutionButton.disabled = expectedCharacters.length === 0;
+
       showSolutionButton.dataset.active = "false";
     }
 
@@ -828,6 +835,7 @@
     }
 
     const band = laufband.getBoundingClientRect();
+
     const markerRect = marker.getBoundingClientRect();
 
     markerX = markerRect.left - band.left + markerRect.width / 2;
@@ -839,7 +847,7 @@
     }
 
     if (units <= characterTimeline[0].startUnits) {
-      return visualTimeline[0].x;
+      return visualTimeline[0].x + CHARACTER_VISUAL_WIDTH / 2;
     }
 
     const lastTimeline = characterTimeline[characterTimeline.length - 1];
@@ -847,23 +855,25 @@
     const lastVisual = visualTimeline[visualTimeline.length - 1];
 
     if (units >= lastTimeline.endUnits) {
-      return lastVisual.x;
+      return lastVisual.x + CHARACTER_VISUAL_WIDTH / 2;
     }
 
     const index = getSynchronizedCharacterIndex(units);
 
     if (index < 0) {
-      return visualTimeline[0].x;
+      return visualTimeline[0].x + CHARACTER_VISUAL_WIDTH / 2;
     }
 
     const current = characterTimeline[index];
+
     const visualCurrent = visualTimeline[index];
 
     if (index >= characterTimeline.length - 1) {
-      return visualCurrent.x;
+      return visualCurrent.x + CHARACTER_VISUAL_WIDTH / 2;
     }
 
     const next = characterTimeline[index + 1];
+
     const visualNext = visualTimeline[index + 1];
 
     const interval = Math.max(0.0001, next.startUnits - current.startUnits);
@@ -873,7 +883,11 @@
       Math.min(1, (units - current.startUnits) / interval),
     );
 
-    return visualCurrent.x + (visualNext.x - visualCurrent.x) * progress;
+    const currentCenter = visualCurrent.x + CHARACTER_VISUAL_WIDTH / 2;
+
+    const nextCenter = visualNext.x + CHARACTER_VISUAL_WIDTH / 2;
+
+    return currentCenter + (nextCenter - currentCenter) * progress;
   }
 
   function setTrackPositionForUnits(units) {
@@ -885,7 +899,7 @@
 
     const visualX = getVisualXForUnits(units);
 
-    line.style.left = markerX - visualX - CHARACTER_VISUAL_WIDTH / 2 + "px";
+    line.style.left = markerX - visualX + "px";
   }
 
   function setTrackAtStart() {
@@ -899,6 +913,7 @@
   function stopAnimation() {
     if (animationFrame !== null) {
       cancelAnimationFrame(animationFrame);
+
       animationFrame = null;
     }
   }
@@ -912,6 +927,7 @@
 
     if (elapsed >= duration) {
       elapsed = duration;
+
       setTrackAtEnd();
 
       currentTimelineIndex = expectedCharacters.length - 1;
@@ -943,9 +959,11 @@
 
     try {
       const audio = await INCWAudio.start();
+
       return !!audio && audio.state === "running";
     } catch (error) {
       console.error("Audio:", error);
+
       return false;
     }
   }
@@ -990,8 +1008,21 @@
       return;
     }
 
-    addTypedCharacter(MORSE_REVERSE[morseInput] || "?");
+    const character = MORSE_REVERSE[morseInput] || "?";
+
+    const targetIndex =
+      keyDownCharacterIndex >= 0 ? keyDownCharacterIndex : currentTimelineIndex;
+
+    if (targetIndex >= 0 && targetIndex < expectedCharacters.length) {
+      typedSequence[targetIndex] = character;
+
+      visibleCharacterCount = Math.max(visibleCharacterCount, targetIndex + 1);
+    }
+
     morseInput = "";
+    keyDownCharacterIndex = -1;
+
+    updateSolution();
   }
 
   function finishKeyStroke() {
@@ -1017,26 +1048,7 @@
     characterTimer = window.setTimeout(() => {
       characterTimer = null;
       finishMorseCharacter();
-    }, getDitMilliseconds() * 3);
-  }
-
-  function addTypedCharacter(character) {
-    if (!running || paused) {
-      return;
-    }
-
-    const index = currentTimelineIndex;
-
-    if (
-      index < 0 ||
-      index >= expectedCharacters.length ||
-      typedSequence[index] !== null
-    ) {
-      return;
-    }
-
-    typedSequence[index] = String(character);
-    updateSolution();
+    }, getDitMilliseconds() * CW_CHARACTER_GAP);
   }
 
   async function handleSpaceDown(event) {
@@ -1069,9 +1081,44 @@
       return;
     }
 
-    if (characterTimer !== null) {
+    /*
+     * WICHTIG:
+     * Ein vorheriges Morsezeichen muss
+     * abgeschlossen sein, bevor das
+     * nächste Zeichen begonnen wird.
+     *
+     * Sonst würden z.B.
+     *
+     * E = .
+     * E = .
+     * E = .
+     * E = .
+     *
+     * zu "...." zusammenlaufen und
+     * dadurch als H erkannt werden.
+     */
+    if (morseInput) {
+      if (characterTimer !== null) {
+        clearTimeout(characterTimer);
+        characterTimer = null;
+      }
+
+      finishMorseCharacter();
+    } else if (characterTimer !== null) {
       clearTimeout(characterTimer);
       characterTimer = null;
+    }
+
+    updateSynchronizedState();
+
+    keyDownCharacterIndex = currentTimelineIndex;
+
+    if (
+      keyDownCharacterIndex < 0 ||
+      keyDownCharacterIndex >= expectedCharacters.length
+    ) {
+      keyDownCharacterIndex = -1;
+      return;
     }
 
     keyDown = true;
@@ -1097,6 +1144,7 @@
     }
 
     finishKeyStroke();
+
     scheduleCharacterFinish();
   }
 
@@ -1172,10 +1220,12 @@
         duration = getDuration();
 
         track.style.visibility = "visible";
+
         updateButtons(false);
       });
     } catch (error) {
       console.error("CW rebuild:", error);
+
       track.style.visibility = "visible";
     }
   }
@@ -1198,10 +1248,20 @@
         layout();
 
         duration = getDuration();
+
         elapsed = 0;
         currentTimelineIndex = -1;
         visibleCharacterCount = 0;
         typedSequence = expectedCharacters.map(() => null);
+
+        keyDownCharacterIndex = -1;
+        morseInput = "";
+
+        if (characterTimer !== null) {
+          clearTimeout(characterTimer);
+
+          characterTimer = null;
+        }
 
         running = true;
         paused = false;
@@ -1220,6 +1280,7 @@
       });
     } catch (error) {
       console.error("CW start:", error);
+
       track.style.visibility = "visible";
     }
   }
@@ -1233,6 +1294,7 @@
       elapsed = Math.max(0, Math.min(duration, performance.now() - startTime));
 
       updateSynchronizedState();
+
       setTrackPositionForUnits(getTimelinePosition());
 
       paused = true;
@@ -1248,6 +1310,7 @@
     }
 
     startTime = performance.now() - elapsed;
+
     paused = false;
 
     if (pauseButton) {
@@ -1262,6 +1325,7 @@
       elapsed = Math.max(0, Math.min(duration, performance.now() - startTime));
 
       updateSynchronizedState();
+
       setTrackPositionForUnits(getTimelinePosition());
     }
 
@@ -1296,6 +1360,7 @@
     paused = false;
 
     toneStop();
+
     setTrackAtEnd();
 
     if (keyDown) {
@@ -1314,6 +1379,7 @@
     }
 
     const allMethods = getAllMethods();
+
     const previousId = selectId || currentMethod?.id || null;
 
     methodSelect.replaceChildren();
@@ -1376,6 +1442,7 @@
 
   function selectLesson() {
     const value = Number(lessonSelect.value);
+
     const count = getLessonCount();
 
     currentLesson =
@@ -1395,7 +1462,9 @@
 
     customFiles.forEach((file) => {
       const row = document.createElement("div");
+
       const name = document.createElement("span");
+
       const button = document.createElement("button");
 
       name.textContent = file.name;
@@ -1411,6 +1480,7 @@
       });
 
       row.append(name, button);
+
       customFilesElement.appendChild(row);
     });
   }
@@ -1432,11 +1502,15 @@
   }
 
   window.addEventListener("keydown", handleSpaceDown);
+
   window.addEventListener("keyup", handleSpaceUp);
+
   window.addEventListener("keydown", handleControlX);
+
   window.addEventListener("blur", handleWindowBlur);
 
   methodSelect?.addEventListener("change", selectMethod);
+
   lessonSelect?.addEventListener("change", selectLesson);
 
   groupsInput?.addEventListener("input", () => {
@@ -1458,8 +1532,11 @@
   });
 
   startButton?.addEventListener("click", start);
+
   pauseButton?.addEventListener("click", togglePause);
+
   stopButton?.addEventListener("click", stop);
+
   showSolutionButton?.addEventListener("click", toggleSolution);
 
   customFileInput?.addEventListener("change", async () => {
