@@ -149,28 +149,6 @@ function setStatus(text) {
   }
 }
 
-/*
- * Jede Methode mit "source" ist automatisch eine CSV-Methode.
- *
- * Dadurch muss hier nicht mehr für jeden neuen CSV-Typ
- * etwas ergänzt werden.
- *
- * Beispiel:
- *
- *   {
- *     "id": "abbreviations",
- *     "source": "abbreviations.csv",
- *     "type": "abbreviations"
- *   }
- *
- *   {
- *     "id": "q-groups",
- *     "source": "q-groups.csv",
- *     "type": "q-groups"
- *   }
- *
- * Beide funktionieren automatisch.
- */
 function isAbbreviationMethod() {
   return (
     typeof currentMethod?.source === "string" ||
@@ -207,46 +185,18 @@ function isGenerationActive(generation) {
    CSV
    ============================================================ */
 
-/*
- * CSV-Dateien haben immer zwei Spalten.
- *
- * Spalte 1 = Trainingsinhalt
- * Spalte 2 = Information
- *
- * Nur Spalte 1 wird für das Training verwendet.
- *
- * Beispiel:
- *
- * abbreviation,meaning
- * QRG,Frequenz
- * QRL,besetzt
- * QRM,Störung
- *
- * Intern:
- *
- * [
- *   { abbreviation: "QRG", meaning: "Frequenz" },
- *   { abbreviation: "QRL", meaning: "besetzt" },
- *   { abbreviation: "QRM", meaning: "Störung" }
- * ]
- *
- * Die bestehende Bezeichnung abbreviation/meaning
- * bleibt erhalten, damit der restliche Code unverändert
- * funktionieren kann.
- */
-
 function parseCSVLine(line) {
   const values = [];
   let value = "";
   let quoted = false;
 
-  for (let i = 0; i < line.length; i++) {
-    const character = line[i];
+  for (let index = 0; index < line.length; index++) {
+    const character = line[index];
 
     if (character === '"') {
-      if (quoted && line[i + 1] === '"') {
+      if (quoted && line[index + 1] === '"') {
         value += '"';
-        i++;
+        index++;
       } else {
         quoted = !quoted;
       }
@@ -280,16 +230,8 @@ function parseCSV(text) {
 
   const result = [];
 
-  /*
-   * Erste Zeile ist die Kopfzeile.
-   * Danach wird ausschließlich die erste Spalte
-   * als Trainingsinhalt verwendet.
-   *
-   * Die zweite Spalte wird lediglich als Information
-   * gespeichert.
-   */
-  for (let i = 1; i < lines.length; i++) {
-    const values = parseCSVLine(lines[i]);
+  for (let index = 1; index < lines.length; index++) {
+    const values = parseCSVLine(lines[index]);
 
     if (values.length < 1) {
       continue;
@@ -337,39 +279,43 @@ function renderCustomFiles() {
 
   customFilesElement.replaceChildren();
 
-  for (const file of customFiles) {
+  customFiles.forEach((file) => {
     const row = document.createElement("div");
     row.className = "custom-file";
 
     const name = document.createElement("span");
     name.textContent = file.name;
 
-    const removeButton = document.createElement("button");
-    removeButton.type = "button";
-    removeButton.textContent = "Remove";
-    removeButton.addEventListener("click", () => removeCustomFile(file.id));
+    const button = document.createElement("button");
 
-    row.append(name, removeButton);
+    button.type = "button";
+    button.className = "custom-file-remove";
+    button.textContent = "Remove";
+
+    button.addEventListener("click", () => {
+      removeCustomFile(file.id);
+    });
+
+    row.append(name, button);
     customFilesElement.appendChild(row);
-  }
+  });
 }
 
 async function addCustomFile(file) {
   const data = parseCSV(await file.text());
-  const name = file.name.replace(/\.csv$/i, "");
 
   const id = "custom-" + Date.now() + "-" + Math.random().toString(36).slice(2);
 
   customFiles.push({
     id,
-    name,
+    name: file.name.replace(/\.csv$/i, ""),
     data,
   });
 
   renderCustomFiles();
   rebuildMethods(id);
 
-  setStatus(`"${name}" loaded successfully.`);
+  setStatus(`"${file.name.replace(/\.csv$/i, "")}" loaded successfully.`);
 }
 
 function removeCustomFile(id) {
@@ -404,9 +350,9 @@ function rebuildMethods(selectId = null) {
 
   methodSelect.replaceChildren();
 
-  for (const method of allMethods) {
+  allMethods.forEach((method) => {
     if (!method?.id) {
-      continue;
+      return;
     }
 
     const option = document.createElement("option");
@@ -415,12 +361,14 @@ function rebuildMethods(selectId = null) {
     option.textContent = method.name || method.id;
 
     methodSelect.appendChild(option);
-  }
+  });
 
   if (!allMethods.length) {
     currentMethod = null;
+
     populateLessons();
     updateCharacters();
+
     return;
   }
 
@@ -448,6 +396,7 @@ async function loadAbbreviations() {
     }
 
     abbreviationData = file.data.slice();
+
     return;
   }
 
@@ -520,11 +469,11 @@ function populateLessons() {
 
   lessonSelect.replaceChildren();
 
-  for (let i = 1; i <= getLessonCount(); i++) {
+  for (let index = 1; index <= getLessonCount(); index++) {
     const option = document.createElement("option");
 
-    option.value = String(i);
-    option.textContent = "Lesson " + i;
+    option.value = String(index);
+    option.textContent = "Lesson " + index;
 
     lessonSelect.appendChild(option);
   }
@@ -572,7 +521,6 @@ function updateCharacters() {
 
 function getGroupSettings() {
   let groups = parseInt(groupsInput.value, 10);
-
   let groupSize = parseInt(groupSizeInput.value, 10);
 
   if (!Number.isFinite(groups) || groups < 1) {
@@ -631,14 +579,13 @@ function createCharacterSequence() {
   }
 
   const { groups, groupSize } = getGroupSettings();
-
   const sequence = [];
 
   for (let group = 0; group < groups; group++) {
-    for (let i = 0; i < groupSize; i++) {
-      const index = Math.floor(Math.random() * available.length);
+    for (let index = 0; index < groupSize; index++) {
+      const randomIndex = Math.floor(Math.random() * available.length);
 
-      sequence.push(available[index]);
+      sequence.push(available[randomIndex]);
     }
 
     if (group < groups - 1) {
@@ -657,14 +604,13 @@ function createAbbreviationSequence() {
   }
 
   const { groups, groupSize } = getGroupSettings();
-
   const sequence = [];
 
   for (let group = 0; group < groups; group++) {
-    for (let i = 0; i < groupSize; i++) {
-      const index = Math.floor(Math.random() * available.length);
+    for (let index = 0; index < groupSize; index++) {
+      const randomIndex = Math.floor(Math.random() * available.length);
 
-      sequence.push(available[index]);
+      sequence.push(available[randomIndex]);
     }
 
     if (group < groups - 1) {
@@ -744,7 +690,6 @@ function playTone(duration, finished, generation) {
   if (paused) {
     timer = setTimeout(() => {
       timer = null;
-
       playTone(duration, finished, generation);
     }, 50);
 
@@ -784,7 +729,6 @@ function waitUnits(units, finished, generation) {
   if (paused) {
     timer = setTimeout(() => {
       timer = null;
-
       waitUnits(units, finished, generation);
     }, 50);
 
@@ -817,7 +761,6 @@ function sendCode(
   if (paused) {
     timer = setTimeout(() => {
       timer = null;
-
       sendCode(code, finished, trailingGap, generation);
     }, 50);
 
@@ -847,7 +790,6 @@ function sendCode(
 
     if (index >= code.length) {
       waitUnits(trailingGap, finished, generation);
-
       return;
     }
 
@@ -885,7 +827,6 @@ function sendMorse(
 
   if (!code) {
     console.warn("No Morse code for:", character);
-
     finished();
     return;
   }
@@ -1010,7 +951,6 @@ function sendNextAbbreviation(generation = trainingGeneration) {
 
   if (entry === null) {
     sendNextAbbreviation(generation);
-
     return;
   }
 
@@ -1018,15 +958,6 @@ function sendNextAbbreviation(generation = trainingGeneration) {
 
   updateProgress();
 
-  /*
-   * WICHTIG:
-   *
-   * Nur die erste CSV-Spalte wird
-   * als Morse-Inhalt verwendet.
-   *
-   * Die zweite Spalte (meaning)
-   * wird NICHT abgespielt.
-   */
   sendAbbreviation(
     entry.abbreviation,
     () => sendNextAbbreviation(generation),
@@ -1056,11 +987,10 @@ function buildSolutionText() {
   }
 
   const { groupSize } = getGroupSettings();
-
   const groups = [];
 
-  for (let i = 0; i < playedSequence.length; i += groupSize) {
-    groups.push(playedSequence.slice(i, i + groupSize).join(""));
+  for (let index = 0; index < playedSequence.length; index += groupSize) {
+    groups.push(playedSequence.slice(index, index + groupSize).join(""));
   }
 
   return groups.join(" ");
@@ -1068,12 +998,15 @@ function buildSolutionText() {
 
 function updateProgress() {
   const total = countTrainingItems();
-
   const current = playedSequence.length;
 
-  counterElement.textContent = `${current} / ${total}`;
+  if (counterElement) {
+    counterElement.textContent = `${current} / ${total}`;
+  }
 
-  progressBar.style.width = (total > 0 ? (current / total) * 100 : 0) + "%";
+  if (progressBar) {
+    progressBar.style.width = (total > 0 ? (current / total) * 100 : 0) + "%";
+  }
 }
 
 function showSolution() {
@@ -1082,7 +1015,6 @@ function showSolution() {
   }
 
   solutionElement.textContent = buildSolutionText();
-
   solutionElement.hidden = !solutionElement.hidden;
 }
 
@@ -1090,10 +1022,24 @@ function showSolution() {
    TRAINING CONTROL
    ============================================================ */
 
+function updateTrainingButtons(active) {
+  if (startButton) {
+    startButton.disabled = active;
+  }
+
+  if (pauseButton) {
+    pauseButton.disabled = !active;
+    pauseButton.textContent = paused ? "▶ Resume" : "⏸ Pause";
+  }
+
+  if (stopButton) {
+    stopButton.disabled = !active;
+  }
+}
+
 async function startTraining() {
   if (!currentMethod) {
     setStatus("No training set selected.");
-
     return;
   }
 
@@ -1101,7 +1047,6 @@ async function startTraining() {
 
   if (!trainingSequence.length) {
     setStatus("No training data available.");
-
     return;
   }
 
@@ -1109,9 +1054,7 @@ async function startTraining() {
     await startAudio();
   } catch (error) {
     console.error(error);
-
     setStatus(error.message);
-
     return;
   }
 
@@ -1128,20 +1071,23 @@ async function startTraining() {
   paused = false;
 
   solutionElement.textContent = "";
-
   solutionElement.hidden = true;
 
   solutionButton.disabled = true;
 
-  progressBar.style.width = "0%";
+  if (progressBar) {
+    progressBar.style.width = "0%";
+  }
 
-  counterElement.textContent = `0 / ${countTrainingItems()}`;
+  if (counterElement) {
+    counterElement.textContent = `0 / ${countTrainingItems()}`;
+  }
 
-  startButton.disabled = true;
-  pauseButton.disabled = false;
-  stopButton.disabled = false;
+  updateTrainingButtons(true);
 
-  pauseButton.textContent = "⏸ Pause";
+  if (pauseButton) {
+    pauseButton.textContent = "⏸ Pause";
+  }
 
   setStatus("VVV");
 
@@ -1174,7 +1120,9 @@ function togglePause() {
 
     clearTimer();
 
-    pauseButton.textContent = "▶ Resume";
+    if (pauseButton) {
+      pauseButton.textContent = "▶ Resume";
+    }
 
     setStatus("Paused");
 
@@ -1183,7 +1131,9 @@ function togglePause() {
 
   paused = false;
 
-  pauseButton.textContent = "⏸ Pause";
+  if (pauseButton) {
+    pauseButton.textContent = "⏸ Pause";
+  }
 
   setStatus("Training");
 
@@ -1202,14 +1152,13 @@ function stopTraining() {
   stopAudio();
 
   solutionElement.textContent = buildSolutionText();
-
   solutionElement.hidden = true;
 
-  startButton.disabled = false;
-  pauseButton.disabled = true;
-  stopButton.disabled = true;
+  updateTrainingButtons(false);
 
-  pauseButton.textContent = "⏸ Pause";
+  if (pauseButton) {
+    pauseButton.textContent = "⏸ Pause";
+  }
 
   setStatus("Stopped");
 
@@ -1236,20 +1185,23 @@ function finishTraining(generation = trainingGeneration) {
       clearTimer();
       stopAudio();
 
-      startButton.disabled = false;
-      pauseButton.disabled = true;
-      stopButton.disabled = true;
+      updateTrainingButtons(false);
 
-      pauseButton.textContent = "⏸ Pause";
+      if (pauseButton) {
+        pauseButton.textContent = "⏸ Pause";
+      }
 
-      progressBar.style.width = "100%";
+      if (progressBar) {
+        progressBar.style.width = "100%";
+      }
 
       const total = countTrainingItems();
 
-      counterElement.textContent = `${total} / ${total}`;
+      if (counterElement) {
+        counterElement.textContent = `${total} / ${total}`;
+      }
 
       solutionElement.textContent = buildSolutionText();
-
       solutionElement.hidden = true;
 
       setStatus("Training finished");
@@ -1274,20 +1226,24 @@ function resetTraining() {
   playedSequence = [];
   currentCharacter = 0;
 
-  startButton.disabled = false;
-  pauseButton.disabled = true;
-  stopButton.disabled = true;
+  updateTrainingButtons(false);
 
-  pauseButton.textContent = "⏸ Pause";
+  if (pauseButton) {
+    pauseButton.textContent = "⏸ Pause";
+  }
 
   solutionButton.disabled = true;
 
   solutionElement.hidden = true;
   solutionElement.textContent = "";
 
-  progressBar.style.width = "0%";
+  if (progressBar) {
+    progressBar.style.width = "0%";
+  }
 
-  counterElement.textContent = "0 / 0";
+  if (counterElement) {
+    counterElement.textContent = "0 / 0";
+  }
 }
 
 /* ============================================================

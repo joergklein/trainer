@@ -1,13 +1,19 @@
 "use strict";
 
 (() => {
+  /* ============================================================
+     DOM
+     ============================================================ */
+
   const methodSelect = document.getElementById("method");
   const lessonSelect = document.getElementById("lesson");
+
   const groupsInput = document.getElementById("groups");
   const groupSizeInput = document.getElementById("groupSize");
   const wpmInput = document.getElementById("wpm");
   const toneInput = document.getElementById("tone");
   const volumeInput = document.getElementById("volume");
+
   const customFileInput = document.getElementById("custom-file");
   const customFilesElement = document.getElementById("custom-files");
 
@@ -21,6 +27,10 @@
 
   const showSolutionButton = document.getElementById("show-solution");
   const solutionElement = document.getElementById("solution");
+
+  /* ============================================================
+     MORSE
+     ============================================================ */
 
   const MORSE = {
     A: ".-",
@@ -83,8 +93,13 @@
     Object.entries(MORSE).map(([character, code]) => [code, character]),
   );
 
+  /* ============================================================
+     CW TIMING
+     ============================================================ */
+
   const CW_DIT = 1;
   const CW_DAH = 3;
+
   const CW_ELEMENT_GAP = 1;
   const CW_CHARACTER_GAP = 3;
   const CW_WORD_GAP = 7;
@@ -93,8 +108,13 @@
   const CHARACTER_VISUAL_GAP = 0;
   const GROUP_VISUAL_GAP = 14;
 
+  /* ============================================================
+     DATA / STATE
+     ============================================================ */
+
   let methods = [];
   let customFiles = [];
+
   let currentMethod = null;
   let currentLesson = 1;
   let abbreviationData = [];
@@ -106,6 +126,7 @@
 
   let characterTimeline = [];
   let totalUnits = 0;
+
   let currentTimelineIndex = -1;
   let visibleCharacterCount = 0;
 
@@ -114,6 +135,7 @@
 
   let running = false;
   let paused = false;
+
   let animationFrame = null;
   let startTime = 0;
   let elapsed = 0;
@@ -124,14 +146,18 @@
   let keyDown = false;
   let keyDownStarted = 0;
   let keyDownCharacterIndex = -1;
+
   let characterTimer = null;
   let ignoreSpaceKeyUp = false;
 
+  /* ============================================================
+     SETTINGS
+     ============================================================ */
+
   function getWpm() {
     const value = Number(wpmInput?.value);
-    const result = Number.isFinite(value) && value >= 1 ? value : 12;
 
-    return result;
+    return Number.isFinite(value) && value >= 1 ? value : 12;
   }
 
   function getDitMilliseconds() {
@@ -170,28 +196,48 @@
       groupSize = 5;
     }
 
-    return { groups, groupSize };
+    return {
+      groups,
+      groupSize,
+    };
   }
 
-  function morseUnits(character) {
-    const code = MORSE[String(character).toUpperCase()];
+  /* ============================================================
+     METHOD HELPERS
+     ============================================================ */
 
-    if (!code) {
-      return 0;
-    }
-
-    let units = 0;
-
-    for (let index = 0; index < code.length; index++) {
-      units += code[index] === "-" ? CW_DAH : CW_DIT;
-
-      if (index < code.length - 1) {
-        units += CW_ELEMENT_GAP;
-      }
-    }
-
-    return units;
+  function isAbbreviationMethod() {
+    return (
+      typeof currentMethod?.source === "string" ||
+      currentMethod?.type === "custom"
+    );
   }
+
+  function isCustomMethod() {
+    return currentMethod?.type === "custom";
+  }
+
+  function getAlphabet() {
+    return typeof currentMethod?.alphabet === "string"
+      ? Array.from(currentMethod.alphabet)
+      : [];
+  }
+
+  function getAllMethods() {
+    return [
+      ...methods,
+      ...customFiles.map((file) => ({
+        id: file.id,
+        name: file.name,
+        type: "custom",
+        customFileId: file.id,
+      })),
+    ];
+  }
+
+  /* ============================================================
+     CSV
+     ============================================================ */
 
   function parseCSVLine(line) {
     const values = [];
@@ -238,44 +284,19 @@
 
     return lines.slice(1).reduce((result, line) => {
       const values = parseCSVLine(line);
+
       const abbreviation = values[0]?.trim() || "";
       const meaning = values[1]?.trim() || "";
 
       if (abbreviation) {
-        result.push({ abbreviation, meaning });
+        result.push({
+          abbreviation,
+          meaning,
+        });
       }
 
       return result;
     }, []);
-  }
-
-  function isAbbreviationMethod() {
-    return (
-      typeof currentMethod?.source === "string" ||
-      currentMethod?.type === "custom"
-    );
-  }
-
-  function isCustomMethod() {
-    return currentMethod?.type === "custom";
-  }
-
-  function getAlphabet() {
-    return typeof currentMethod?.alphabet === "string"
-      ? Array.from(currentMethod.alphabet)
-      : [];
-  }
-
-  function getAllMethods() {
-    return [
-      ...methods,
-      ...customFiles.map((file) => ({
-        id: file.id,
-        name: file.name,
-        type: "custom",
-        customFileId: file.id,
-      })),
-    ];
   }
 
   async function loadAbbreviations() {
@@ -295,6 +316,7 @@
       }
 
       abbreviationData = file.data.slice();
+
       return;
     }
 
@@ -308,6 +330,10 @@
 
     abbreviationData = parseCSV(await response.text());
   }
+
+  /* ============================================================
+     LESSONS
+     ============================================================ */
 
   function getLessonCount() {
     return isAbbreviationMethod()
@@ -350,6 +376,10 @@
     }
   }
 
+  /* ============================================================
+     TRAINING GROUPS
+     ============================================================ */
+
   function createTrainingGroups() {
     const available = getCurrentLessonValues();
 
@@ -365,6 +395,7 @@
 
       for (let itemIndex = 0; itemIndex < groupSize; itemIndex++) {
         const index = Math.floor(Math.random() * available.length);
+
         group.push(String(available[index]));
       }
 
@@ -373,6 +404,10 @@
 
     return result;
   }
+
+  /* ============================================================
+     SOLUTION
+     ============================================================ */
 
   function buildSolutionWords() {
     const words = ["VVV", "KA"];
@@ -414,6 +449,7 @@
     }
 
     typedSequence = expectedCharacters.map(() => null);
+
     currentTimelineIndex = -1;
     visibleCharacterCount = 0;
   }
@@ -448,6 +484,30 @@
     };
   }
 
+  /* ============================================================
+     MORSE TIMELINE
+     ============================================================ */
+
+  function morseUnits(character) {
+    const code = MORSE[String(character).toUpperCase()];
+
+    if (!code) {
+      return 0;
+    }
+
+    let units = 0;
+
+    for (let index = 0; index < code.length; index++) {
+      units += code[index] === "-" ? CW_DAH : CW_DIT;
+
+      if (index < code.length - 1) {
+        units += CW_ELEMENT_GAP;
+      }
+    }
+
+    return units;
+  }
+
   function buildCharacterTimeline() {
     const timeline = [];
     let units = 0;
@@ -471,10 +531,11 @@
 
       const wordInfo = getSolutionWordInfo(index);
 
-      units += wordInfo.isLastCharacter ? CW_WORD_GAP : CW_CHARACTER_GAP;
+      units += wordInfo.isLastCharacter ? 7 : CW_CHARACTER_GAP;
     });
 
     characterTimeline = timeline;
+
     totalUnits = timeline.length ? timeline[timeline.length - 1].endUnits : 0;
 
     return timeline;
@@ -488,11 +549,9 @@
       if (index > 0) {
         const previousInfo = getSolutionWordInfo(index - 1);
 
-        if (previousInfo.isLastCharacter) {
-          x += GROUP_VISUAL_GAP;
-        } else {
-          x += CHARACTER_VISUAL_GAP;
-        }
+        x += previousInfo.isLastCharacter
+          ? GROUP_VISUAL_GAP
+          : CHARACTER_VISUAL_GAP;
       }
 
       timeline.push({
@@ -510,6 +569,10 @@
 
     return timeline;
   }
+
+  /* ============================================================
+     TIMELINE POSITION
+     ============================================================ */
 
   function getDuration() {
     return totalUnits ? Math.max(1, totalUnits * getDitMilliseconds()) : 1;
@@ -556,114 +619,9 @@
       index < 0 ? 0 : Math.min(index + 1, expectedCharacters.length);
   }
 
-  function ensureSolutionStyles() {
-    if (document.getElementById("cwtype-solution-runtime-style")) {
-      return;
-    }
-
-    const style = document.createElement("style");
-
-    style.id = "cwtype-solution-runtime-style";
-
-    style.textContent = `
-      .cwtype-solution {
-        white-space: nowrap;
-      }
-
-      .cwtype-solution-character {
-        display: inline-block;
-        min-width: 0.72em;
-        text-align: center;
-        line-height: 1.1;
-      }
-
-      .cwtype-solution-character.correct {
-        color: inherit;
-        text-decoration: none;
-      }
-
-      .cwtype-solution-character.wrong,
-      .cwtype-solution-character.missing {
-        color: red;
-        text-decoration-line: underline;
-        text-decoration-color: red;
-        text-decoration-thickness: 2px;
-        text-underline-offset: 3px;
-      }
-
-      .cwtype-solution-character-gap {
-        display: inline-block;
-        width: 0;
-      }
-
-      .cwtype-solution-group-gap {
-        display: inline-block;
-        width: 1.35em;
-      }
-
-      /*
-       * Custom-Dateien / Remove
-       *
-       * Die komplette Zeile bekommt dieselbe Box-Behandlung
-       * wie die übrigen UI-Bereiche. Der Button wird nicht
-       * aus dem Rahmen herausgelöst.
-       */
-      #custom-files {
-        width: 100%;
-        box-sizing: border-box;
-      }
-
-      #custom-files > div {
-        width: 100%;
-        min-height: 42px;
-        box-sizing: border-box;
-
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-
-        padding: 8px 10px;
-
-        border: 1px solid currentColor;
-        border-radius: 6px;
-
-        margin-top: 8px;
-      }
-
-      #custom-files > div > span {
-        min-width: 0;
-        flex: 1 1 auto;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      #custom-files > div > button {
-        flex: 0 0 auto;
-        box-sizing: border-box;
-
-        min-height: 30px;
-        padding: 5px 12px;
-
-        margin: 0;
-
-        border: 1px solid currentColor;
-        border-radius: 4px;
-
-        background: transparent;
-        color: inherit;
-
-        cursor: pointer;
-      }
-
-      #custom-files > div > button:hover {
-        opacity: 0.8;
-      }
-    `;
-
-    document.head.appendChild(style);
-  }
+  /* ============================================================
+     SOLUTION DISPLAY
+     ============================================================ */
 
   function createSolutionCharacter(expected, typed, visible) {
     const element = document.createElement("span");
@@ -678,6 +636,7 @@
       element.textContent = "_";
       element.classList.add("missing");
       element.title = "Erwartet: " + expected;
+
       return element;
     }
 
@@ -685,6 +644,7 @@
 
     if (String(typed).toUpperCase() === String(expected).toUpperCase()) {
       element.classList.add("correct");
+
       return element;
     }
 
@@ -807,6 +767,7 @@
 
     currentTimelineIndex = -1;
     visibleCharacterCount = 0;
+
     typedSequence = expectedCharacters.map(() => null);
 
     if (showSolutionButton) {
@@ -819,23 +780,16 @@
     }
   }
 
+  /* ============================================================
+     TRACK
+     ============================================================ */
+
   function createCharacterElement(character, index) {
     const element = document.createElement("span");
 
     element.className = "cwtype-character";
     element.dataset.index = String(index);
     element.textContent = String(character);
-
-    Object.assign(element.style, {
-      position: "absolute",
-      top: "50%",
-      width: `${CHARACTER_VISUAL_WIDTH}px`,
-      height: "1em",
-      textAlign: "center",
-      transform: "translateY(-50%)",
-      lineHeight: "1",
-      whiteSpace: "nowrap",
-    });
 
     return element;
   }
@@ -852,20 +806,13 @@
     buildExpectedCharacters();
     buildCharacterTimeline();
     buildVisualTimeline();
+
     resetSolution();
 
     const line = document.createElement("div");
 
     line.className = "cwtype-line";
-
-    Object.assign(line.style, {
-      position: "absolute",
-      top: "0",
-      left: "0",
-      height: "100%",
-      width: `${totalVisualWidth}px`,
-      whiteSpace: "nowrap",
-    });
+    line.style.width = `${totalVisualWidth}px`;
 
     visualTimeline.forEach((visualItem) => {
       const element = createCharacterElement(
@@ -971,6 +918,10 @@
     setTrackPositionForUnits(totalUnits);
   }
 
+  /* ============================================================
+     ANIMATION
+     ============================================================ */
+
   function stopAnimation() {
     if (animationFrame !== null) {
       cancelAnimationFrame(animationFrame);
@@ -1003,11 +954,16 @@
     const units = getTimelinePosition();
 
     setTrackPositionForUnits(units);
+
     updateSynchronizedState();
     updateSolution();
 
     animationFrame = requestAnimationFrame(animate);
   }
+
+  /* ============================================================
+     AUDIO
+     ============================================================ */
 
   async function ensureAudio() {
     if (
@@ -1023,6 +979,7 @@
       return !!audio && audio.state === "running";
     } catch (error) {
       console.error("Audio:", error);
+
       return false;
     }
   }
@@ -1056,6 +1013,10 @@
     }
   }
 
+  /* ============================================================
+     MORSE INPUT
+     ============================================================ */
+
   function addMorseElement(element) {
     if (element === "." || element === "-") {
       morseInput += element;
@@ -1069,12 +1030,6 @@
 
     const character = MORSE_REVERSE[morseInput] || "?";
 
-    /*
-     * Die Eingabe wird bewusst an der zuletzt beim
-     * Tastendruck ermittelten Position gespeichert.
-     * Dadurch bleibt die Lösung/Timeline aus Datei 1
-     * unverändert.
-     */
     const targetIndex =
       keyDownCharacterIndex >= 0 ? keyDownCharacterIndex : currentTimelineIndex;
 
@@ -1102,12 +1057,6 @@
 
     toneStop();
 
-    /*
-     * DIT / DAH-Erkennung aus der funktionierenden Datei 2:
-     *
-     * unter 2 Dit-Zeiten = DIT
-     * ab 2 Dit-Zeiten    = DAH
-     */
     const element = durationMs >= getDitMilliseconds() * 2 ? "-" : ".";
 
     addMorseElement(element);
@@ -1123,6 +1072,10 @@
       finishMorseCharacter();
     }, getDitMilliseconds() * 3);
   }
+
+  /* ============================================================
+     KEYBOARD INPUT
+     ============================================================ */
 
   async function handleSpaceDown(event) {
     if (event.code !== "Space") {
@@ -1154,20 +1107,11 @@
       return;
     }
 
-    /*
-     * Wie in Datei 2:
-     * Eine eventuell noch laufende Zeichenpause wird
-     * beendet, bevor ein neuer Tastendruck beginnt.
-     */
     if (characterTimer !== null) {
       clearTimeout(characterTimer);
       characterTimer = null;
     }
 
-    /*
-     * Die aktuelle Timeline-Position wird direkt vor
-     * Beginn des Tastendrucks bestimmt.
-     */
     updateSynchronizedState();
 
     keyDownCharacterIndex = currentTimelineIndex;
@@ -1232,6 +1176,10 @@
     }
   }
 
+  /* ============================================================
+     BUTTONS
+     ============================================================ */
+
   function updateButtons(active) {
     if (startButton) {
       startButton.disabled = active;
@@ -1246,6 +1194,10 @@
       stopButton.disabled = !active;
     }
   }
+
+  /* ============================================================
+     TRAINING CONTROL
+     ============================================================ */
 
   function rebuild() {
     stopAnimation();
@@ -1310,6 +1262,7 @@
         elapsed = 0;
         currentTimelineIndex = -1;
         visibleCharacterCount = 0;
+
         typedSequence = expectedCharacters.map(() => null);
 
         keyDownCharacterIndex = -1;
@@ -1351,7 +1304,6 @@
       elapsed = Math.max(0, Math.min(duration, performance.now() - startTime));
 
       updateSynchronizedState();
-
       setTrackPositionForUnits(getTimelinePosition());
 
       paused = true;
@@ -1417,7 +1369,6 @@
     paused = false;
 
     toneStop();
-
     setTrackAtEnd();
 
     if (keyDown) {
@@ -1430,13 +1381,16 @@
     updateSolution();
   }
 
+  /* ============================================================
+     METHOD SELECTION
+     ============================================================ */
+
   function rebuildMethods(selectId = null) {
     if (!methodSelect) {
       return;
     }
 
     const allMethods = getAllMethods();
-
     const previousId = selectId || currentMethod?.id || null;
 
     methodSelect.replaceChildren();
@@ -1510,6 +1464,10 @@
     rebuild();
   }
 
+  /* ============================================================
+     CUSTOM FILES
+     ============================================================ */
+
   function renderCustomFiles() {
     if (!customFilesElement) {
       return;
@@ -1520,13 +1478,16 @@
     customFiles.forEach((file) => {
       const row = document.createElement("div");
 
-      const name = document.createElement("span");
+      row.className = "custom-file";
 
-      const button = document.createElement("button");
+      const name = document.createElement("span");
 
       name.textContent = file.name;
 
+      const button = document.createElement("button");
+
       button.type = "button";
+      button.className = "custom-file-remove";
       button.textContent = "Remove";
 
       button.addEventListener("click", () => {
@@ -1537,7 +1498,6 @@
       });
 
       row.append(name, button);
-
       customFilesElement.appendChild(row);
     });
   }
@@ -1557,6 +1517,10 @@
     renderCustomFiles();
     rebuildMethods(id);
   }
+
+  /* ============================================================
+     EVENTS
+     ============================================================ */
 
   window.addEventListener("keydown", handleSpaceDown);
 
@@ -1618,9 +1582,11 @@
     }
   });
 
-  async function init() {
-    ensureSolutionStyles();
+  /* ============================================================
+     INIT
+     ============================================================ */
 
+  async function init() {
     try {
       const response = await fetch("text/index.json", {
         cache: "no-store",
