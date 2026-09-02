@@ -1,1630 +1,1630 @@
 "use strict";
 
-(() => {
-  /* ============================================================
+/* ============================================================
      DOM
      ============================================================ */
 
-  const methodSelect = document.getElementById("method");
-  const lessonSelect = document.getElementById("lesson");
+const methodSelect = document.getElementById("method");
+const lessonSelect = document.getElementById("lesson");
 
-  const groupsInput = document.getElementById("groups");
-  const groupSizeInput = document.getElementById("groupSize");
-  const wpmInput = document.getElementById("wpm");
-  const toneInput = document.getElementById("tone");
-  const volumeInput = document.getElementById("volume");
+const groupsInput = document.getElementById("groups");
+const groupSizeInput = document.getElementById("groupSize");
+const wpmInput = document.getElementById("wpm");
+const toneInput = document.getElementById("tone");
+const volumeInput = document.getElementById("volume");
 
-  const customFileInput = document.getElementById("custom-file");
-  const customFilesElement = document.getElementById("custom-files");
+const customFileInput = document.getElementById("custom-file");
+const customFilesElement = document.getElementById("custom-files");
 
-  const track = document.getElementById("cwtype-track");
-  const marker = document.getElementById("cwtype-marker");
-  const laufband = document.getElementById("cwtype-laufband");
+const track = document.getElementById("cwtype-track");
+const marker = document.getElementById("cwtype-marker");
+const laufband = document.getElementById("cwtype-laufband");
 
-  const startButton = document.getElementById("cwtype-start");
-  const pauseButton = document.getElementById("cwtype-pause");
-  const stopButton = document.getElementById("cwtype-stop");
+const startButton = document.getElementById("cwtype-start");
+const pauseButton = document.getElementById("cwtype-pause");
+const stopButton = document.getElementById("cwtype-stop");
 
-  const showSolutionButton = document.getElementById("show-solution");
-  const solutionElement = document.getElementById("solution");
+const showSolutionButton = document.getElementById("show-solution");
+const solutionElement = document.getElementById("solution");
 
-  /* ============================================================
+/* ============================================================
      MORSE
      ============================================================ */
 
-  const MORSE = {
-    A: ".-",
-    B: "-...",
-    C: "-.-.",
-    D: "-..",
-    E: ".",
-    F: "..-.",
-    G: "--.",
-    H: "....",
-    I: "..",
-    J: ".---",
-    K: "-.-",
-    L: ".-..",
-    M: "--",
-    N: "-.",
-    O: "---",
-    P: ".--.",
-    Q: "--.-",
-    R: ".-.",
-    S: "...",
-    T: "-",
-    U: "..-",
-    V: "...-",
-    W: ".--",
-    X: "-..-",
-    Y: "-.--",
-    Z: "--..",
+const MORSE = {
+  A: ".-",
+  B: "-...",
+  C: "-.-.",
+  D: "-..",
+  E: ".",
+  F: "..-.",
+  G: "--.",
+  H: "....",
+  I: "..",
+  J: ".---",
+  K: "-.-",
+  L: ".-..",
+  M: "--",
+  N: "-.",
+  O: "---",
+  P: ".--.",
+  Q: "--.-",
+  R: ".-.",
+  S: "...",
+  T: "-",
+  U: "..-",
+  V: "...-",
+  W: ".--",
+  X: "-..-",
+  Y: "-.--",
+  Z: "--..",
 
-    0: "-----",
-    1: ".----",
-    2: "..---",
-    3: "...--",
-    4: "....-",
-    5: ".....",
-    6: "-....",
-    7: "--...",
-    8: "---..",
-    9: "----.",
+  0: "-----",
+  1: ".----",
+  2: "..---",
+  3: "...--",
+  4: "....-",
+  5: ".....",
+  6: "-....",
+  7: "--...",
+  8: "---..",
+  9: "----.",
 
-    ".": ".-.-.-",
-    ",": "--..--",
-    "?": "..--..",
-    "/": "-..-.",
-    "=": "-...-",
-    "-": "-....-",
-    "@": ".--.-.",
-    ":": "---...",
-    ";": "-.-.-.",
-    "!": "-.-.--",
-    "'": ".----.",
-    '"': ".-..-.",
-    "+": ".-.-.",
-    "(": "-.--.",
-    ")": "-.--.-",
-    _: "..--.-",
-  };
+  ".": ".-.-.-",
+  ",": "--..--",
+  "?": "..--..",
+  "/": "-..-.",
+  "=": "-...-",
+  "-": "-....-",
+  "@": ".--.-.",
+  ":": "---...",
+  ";": "-.-.-.",
+  "!": "-.-.--",
+  "'": ".----.",
+  '"': ".-..-.",
+  "+": ".-.-.",
+  "(": "-.--.",
+  ")": "-.--.-",
+  _: "..--.-",
+};
 
-  const MORSE_REVERSE = Object.fromEntries(
-    Object.entries(MORSE).map(([character, code]) => [code, character]),
-  );
+const MORSE_REVERSE = Object.fromEntries(
+  Object.entries(MORSE).map(([character, code]) => [code, character]),
+);
 
-  /* ============================================================
+/* ============================================================
      CW TIMING
      ============================================================ */
 
-  const CW_DIT = 1;
-  const CW_DAH = 3;
+const CW_DIT = 1;
+const CW_DAH = 3;
 
-  const CW_ELEMENT_GAP = 1;
-  const CW_CHARACTER_GAP = 3;
-  const CW_WORD_GAP = 7;
+const CW_ELEMENT_GAP = 1;
+const CW_CHARACTER_GAP = 3;
+const CW_WORD_GAP = 7;
 
-  const CHARACTER_VISUAL_WIDTH = 20;
-  const CHARACTER_VISUAL_GAP = 0;
-  const GROUP_VISUAL_GAP = 14;
+const CHARACTER_VISUAL_WIDTH = 20;
+const CHARACTER_VISUAL_GAP = 0;
+const GROUP_VISUAL_GAP = 14;
 
-  /* ============================================================
+/* ============================================================
      DATA / STATE
      ============================================================ */
 
-  let methods = [];
-  let customFiles = [];
+let methods = [];
+let customFiles = [];
 
-  let currentMethod = null;
-  let currentLesson = 1;
-  let abbreviationData = [];
+let currentMethod = null;
+let currentLesson = 1;
+let abbreviationData = [];
 
-  let currentGroups = [];
-  let expectedCharacters = [];
-  let typedSequence = [];
-  let solutionWords = [];
+let currentGroups = [];
+let expectedCharacters = [];
+let typedSequence = [];
+let solutionWords = [];
 
-  let characterTimeline = [];
-  let totalUnits = 0;
+let characterTimeline = [];
+let totalUnits = 0;
 
-  let currentTimelineIndex = -1;
-  let visibleCharacterCount = 0;
+let currentTimelineIndex = -1;
+let visibleCharacterCount = 0;
 
-  let visualTimeline = [];
-  let totalVisualWidth = 0;
+let visualTimeline = [];
+let totalVisualWidth = 0;
 
-  let running = false;
-  let paused = false;
+let running = false;
+let paused = false;
 
-  let animationFrame = null;
-  let startTime = 0;
-  let elapsed = 0;
-  let duration = 1;
-  let markerX = 0;
+let animationFrame = null;
+let startTime = 0;
+let elapsed = 0;
+let duration = 1;
+let markerX = 0;
 
-  let morseInput = "";
-  let keyDown = false;
-  let keyDownStarted = 0;
-  let keyDownCharacterIndex = -1;
+let morseInput = "";
+let keyDown = false;
+let keyDownStarted = 0;
+let keyDownCharacterIndex = -1;
 
-  let characterTimer = null;
-  let ignoreSpaceKeyUp = false;
+let characterTimer = null;
+let ignoreSpaceKeyUp = false;
 
-  /* ============================================================
+/* ============================================================
      SETTINGS
      ============================================================ */
 
-  function getWpm() {
-    const value = Number(wpmInput?.value);
+function getWpm() {
+  const value = Number(wpmInput?.value);
 
-    return Number.isFinite(value) && value >= 1 ? value : 12;
+  return Number.isFinite(value) && value >= 1 ? value : 12;
+}
+
+function getDitMilliseconds() {
+  return 1200 / getWpm();
+}
+
+function getToneFrequency() {
+  const value = Number(toneInput?.value);
+
+  if (!Number.isFinite(value)) {
+    return 600;
   }
 
-  function getDitMilliseconds() {
-    return 1200 / getWpm();
+  return Math.max(100, Math.min(2000, value));
+}
+
+function getVolume() {
+  const value = Number(volumeInput?.value);
+
+  if (!Number.isFinite(value)) {
+    return 0.3;
   }
 
-  function getToneFrequency() {
-    const value = Number(toneInput?.value);
+  return Math.max(0, Math.min(100, value)) / 100;
+}
 
-    if (!Number.isFinite(value)) {
-      return 600;
-    }
+function getGroupSettings() {
+  let groups = parseInt(groupsInput?.value, 10);
+  let groupSize = parseInt(groupSizeInput?.value, 10);
 
-    return Math.max(100, Math.min(2000, value));
+  if (!Number.isFinite(groups) || groups < 1) {
+    groups = 1;
   }
 
-  function getVolume() {
-    const value = Number(volumeInput?.value);
-
-    if (!Number.isFinite(value)) {
-      return 0.3;
-    }
-
-    return Math.max(0, Math.min(100, value)) / 100;
+  if (!Number.isFinite(groupSize) || groupSize < 1) {
+    groupSize = 5;
   }
 
-  function getGroupSettings() {
-    let groups = parseInt(groupsInput?.value, 10);
-    let groupSize = parseInt(groupSizeInput?.value, 10);
+  return {
+    groups,
+    groupSize,
+  };
+}
 
-    if (!Number.isFinite(groups) || groups < 1) {
-      groups = 1;
-    }
-
-    if (!Number.isFinite(groupSize) || groupSize < 1) {
-      groupSize = 5;
-    }
-
-    return {
-      groups,
-      groupSize,
-    };
-  }
-
-  /* ============================================================
+/* ============================================================
      METHOD HELPERS
      ============================================================ */
 
-  function isAbbreviationMethod() {
-    return (
-      typeof currentMethod?.source === "string" ||
-      currentMethod?.type === "custom"
-    );
-  }
+function isAbbreviationMethod() {
+  return (
+    typeof currentMethod?.source === "string" ||
+    currentMethod?.type === "custom"
+  );
+}
 
-  function isCustomMethod() {
-    return currentMethod?.type === "custom";
-  }
+function isCustomMethod() {
+  return currentMethod?.type === "custom";
+}
 
-  function getAlphabet() {
-    return typeof currentMethod?.alphabet === "string"
-      ? Array.from(currentMethod.alphabet)
-      : [];
-  }
+function getAlphabet() {
+  return typeof currentMethod?.alphabet === "string"
+    ? Array.from(currentMethod.alphabet)
+    : [];
+}
 
-  function getAllMethods() {
-    return [
-      ...methods,
-      ...customFiles.map((file) => ({
-        id: file.id,
-        name: file.name,
-        type: "custom",
-        customFileId: file.id,
-      })),
-    ];
-  }
+function getAllMethods() {
+  return [
+    ...methods,
+    ...customFiles.map((file) => ({
+      id: file.id,
+      name: file.name,
+      type: "custom",
+      customFileId: file.id,
+    })),
+  ];
+}
 
-  /* ============================================================
+/* ============================================================
      CSV
      ============================================================ */
 
-  function parseCSVLine(line) {
-    const values = [];
-    let value = "";
-    let quoted = false;
+function parseCSVLine(line) {
+  const values = [];
+  let value = "";
+  let quoted = false;
 
-    for (let index = 0; index < line.length; index++) {
-      const character = line[index];
+  for (let index = 0; index < line.length; index++) {
+    const character = line[index];
 
-      if (character === '"') {
-        if (quoted && line[index + 1] === '"') {
-          value += '"';
-          index++;
-        } else {
-          quoted = !quoted;
-        }
-
-        continue;
+    if (character === '"') {
+      if (quoted && line[index + 1] === '"') {
+        value += '"';
+        index++;
+      } else {
+        quoted = !quoted;
       }
 
-      if (character === "," && !quoted) {
-        values.push(value.trim());
-        value = "";
-        continue;
-      }
-
-      value += character;
+      continue;
     }
 
-    values.push(value.trim());
+    if (character === "," && !quoted) {
+      values.push(value.trim());
+      value = "";
+      continue;
+    }
 
-    return values;
+    value += character;
   }
 
-  function parseCSV(text) {
-    const lines = String(text)
-      .replace(/^\uFEFF/, "")
-      .split(/\r?\n/)
-      .filter((line) => line.trim() !== "");
+  values.push(value.trim());
 
-    if (lines.length < 2) {
-      throw new Error("CSV enthält keine Daten.");
-    }
+  return values;
+}
 
-    return lines.slice(1).reduce((result, line) => {
-      const values = parseCSVLine(line);
+function parseCSV(text) {
+  const lines = String(text)
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== "");
 
-      const abbreviation = values[0]?.trim() || "";
-      const meaning = values[1]?.trim() || "";
-
-      if (abbreviation) {
-        result.push({
-          abbreviation,
-          meaning,
-        });
-      }
-
-      return result;
-    }, []);
+  if (lines.length < 2) {
+    throw new Error("CSV enthält keine Daten.");
   }
 
-  async function loadAbbreviations() {
-    abbreviationData = [];
+  return lines.slice(1).reduce((result, line) => {
+    const values = parseCSVLine(line);
 
-    if (!isAbbreviationMethod()) {
-      return;
-    }
+    const abbreviation = values[0]?.trim() || "";
+    const meaning = values[1]?.trim() || "";
 
-    if (isCustomMethod()) {
-      const file = customFiles.find(
-        (item) => item.id === currentMethod.customFileId,
-      );
-
-      if (!file) {
-        throw new Error("CSV-Datei nicht gefunden.");
-      }
-
-      abbreviationData = file.data.slice();
-
-      return;
-    }
-
-    const response = await fetch("text/" + currentMethod.source, {
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      throw new Error("CSV konnte nicht geladen werden.");
-    }
-
-    abbreviationData = parseCSV(await response.text());
-  }
-
-  /* ============================================================
-     LESSONS
-     ============================================================ */
-
-  function getLessonCount() {
-    return isAbbreviationMethod()
-      ? abbreviationData.length
-      : getAlphabet().length;
-  }
-
-  function getCurrentLessonValues() {
-    if (isAbbreviationMethod()) {
-      return abbreviationData
-        .slice(0, currentLesson)
-        .map((entry) => entry.abbreviation);
-    }
-
-    return getAlphabet().slice(0, currentLesson);
-  }
-
-  function populateLessons() {
-    if (!lessonSelect) {
-      return;
-    }
-
-    lessonSelect.replaceChildren();
-
-    const count = getLessonCount();
-
-    for (let index = 1; index <= count; index++) {
-      const option = document.createElement("option");
-
-      option.value = String(index);
-      option.textContent = "Lesson " + index;
-
-      lessonSelect.appendChild(option);
-    }
-
-    if (lessonSelect.options.length) {
-      lessonSelect.value = String(
-        Math.min(currentLesson, lessonSelect.options.length),
-      );
-    }
-  }
-
-  /* ============================================================
-     TRAINING GROUPS
-     ============================================================ */
-
-  function createTrainingGroups() {
-    const available = getCurrentLessonValues();
-
-    if (!available.length) {
-      return [];
-    }
-
-    const { groups, groupSize } = getGroupSettings();
-    const result = [];
-
-    for (let groupIndex = 0; groupIndex < groups; groupIndex++) {
-      const group = [];
-
-      for (let itemIndex = 0; itemIndex < groupSize; itemIndex++) {
-        const index = Math.floor(Math.random() * available.length);
-
-        group.push(String(available[index]));
-      }
-
-      result.push(group);
+    if (abbreviation) {
+      result.push({
+        abbreviation,
+        meaning,
+      });
     }
 
     return result;
+  }, []);
+}
+
+async function loadAbbreviations() {
+  abbreviationData = [];
+
+  if (!isAbbreviationMethod()) {
+    return;
   }
 
-  /* ============================================================
+  if (isCustomMethod()) {
+    const file = customFiles.find(
+      (item) => item.id === currentMethod.customFileId,
+    );
+
+    if (!file) {
+      throw new Error("CSV-Datei nicht gefunden.");
+    }
+
+    abbreviationData = file.data.slice();
+
+    return;
+  }
+
+  const response = await fetch("text/" + currentMethod.source, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error("CSV konnte nicht geladen werden.");
+  }
+
+  abbreviationData = parseCSV(await response.text());
+}
+
+/* ============================================================
+     LESSONS
+     ============================================================ */
+
+function getLessonCount() {
+  return isAbbreviationMethod()
+    ? abbreviationData.length
+    : getAlphabet().length;
+}
+
+function getCurrentLessonValues() {
+  if (isAbbreviationMethod()) {
+    return abbreviationData
+      .slice(0, currentLesson)
+      .map((entry) => entry.abbreviation);
+  }
+
+  return getAlphabet().slice(0, currentLesson);
+}
+
+function populateLessons() {
+  if (!lessonSelect) {
+    return;
+  }
+
+  lessonSelect.replaceChildren();
+
+  const count = getLessonCount();
+
+  for (let index = 1; index <= count; index++) {
+    const option = document.createElement("option");
+
+    option.value = String(index);
+    option.textContent = "Lesson " + index;
+
+    lessonSelect.appendChild(option);
+  }
+
+  if (lessonSelect.options.length) {
+    lessonSelect.value = String(
+      Math.min(currentLesson, lessonSelect.options.length),
+    );
+  }
+}
+
+/* ============================================================
+     TRAINING GROUPS
+     ============================================================ */
+
+function createTrainingGroups() {
+  const available = getCurrentLessonValues();
+
+  if (!available.length) {
+    return [];
+  }
+
+  const { groups, groupSize } = getGroupSettings();
+  const result = [];
+
+  for (let groupIndex = 0; groupIndex < groups; groupIndex++) {
+    const group = [];
+
+    for (let itemIndex = 0; itemIndex < groupSize; itemIndex++) {
+      const index = Math.floor(Math.random() * available.length);
+
+      group.push(String(available[index]));
+    }
+
+    result.push(group);
+  }
+
+  return result;
+}
+
+/* ============================================================
      SOLUTION
      ============================================================ */
 
-  function buildSolutionWords() {
-    const words = ["VVV", "KA"];
+function buildSolutionWords() {
+  const words = ["VVV", "KA"];
 
-    if (isAbbreviationMethod()) {
-      for (const group of currentGroups) {
-        for (const item of group) {
-          words.push(String(item));
-        }
-      }
-    } else {
-      for (const group of currentGroups) {
-        words.push(group.map((item) => String(item)).join(""));
+  if (isAbbreviationMethod()) {
+    for (const group of currentGroups) {
+      for (const item of group) {
+        words.push(String(item));
       }
     }
-
-    words.push("+");
-
-    return words;
+  } else {
+    for (const group of currentGroups) {
+      words.push(group.map((item) => String(item)).join(""));
+    }
   }
 
-  function buildExpectedCharacters() {
-    expectedCharacters = [];
-    solutionWords = [];
+  words.push("+");
 
-    for (const word of buildSolutionWords()) {
-      const text = String(word);
-      const start = expectedCharacters.length;
+  return words;
+}
 
-      for (const character of Array.from(text)) {
-        expectedCharacters.push(character);
-      }
+function buildExpectedCharacters() {
+  expectedCharacters = [];
+  solutionWords = [];
 
-      solutionWords.push({
-        start,
-        end: expectedCharacters.length,
-        text,
-      });
+  for (const word of buildSolutionWords()) {
+    const text = String(word);
+    const start = expectedCharacters.length;
+
+    for (const character of Array.from(text)) {
+      expectedCharacters.push(character);
     }
 
-    typedSequence = expectedCharacters.map(() => null);
-
-    currentTimelineIndex = -1;
-    visibleCharacterCount = 0;
+    solutionWords.push({
+      start,
+      end: expectedCharacters.length,
+      text,
+    });
   }
 
-  function getSolutionWordInfo(index) {
-    for (let wordIndex = 0; wordIndex < solutionWords.length; wordIndex++) {
-      const word = solutionWords[wordIndex];
+  typedSequence = expectedCharacters.map(() => null);
 
-      if (index >= word.start && index < word.end) {
-        return {
-          wordIndex,
-          start: word.start,
-          end: word.end,
-          text: word.text,
-          characterIndex: index - word.start,
-          characterCount: word.end - word.start,
-          isFirstCharacter: index === word.start,
-          isLastCharacter: index === word.end - 1,
-        };
-      }
+  currentTimelineIndex = -1;
+  visibleCharacterCount = 0;
+}
+
+function getSolutionWordInfo(index) {
+  for (let wordIndex = 0; wordIndex < solutionWords.length; wordIndex++) {
+    const word = solutionWords[wordIndex];
+
+    if (index >= word.start && index < word.end) {
+      return {
+        wordIndex,
+        start: word.start,
+        end: word.end,
+        text: word.text,
+        characterIndex: index - word.start,
+        characterCount: word.end - word.start,
+        isFirstCharacter: index === word.start,
+        isLastCharacter: index === word.end - 1,
+      };
     }
-
-    return {
-      wordIndex: -1,
-      start: -1,
-      end: -1,
-      text: "",
-      characterIndex: -1,
-      characterCount: 0,
-      isFirstCharacter: false,
-      isLastCharacter: false,
-    };
   }
 
-  /* ============================================================
+  return {
+    wordIndex: -1,
+    start: -1,
+    end: -1,
+    text: "",
+    characterIndex: -1,
+    characterCount: 0,
+    isFirstCharacter: false,
+    isLastCharacter: false,
+  };
+}
+
+/* ============================================================
      MORSE TIMELINE
      ============================================================ */
 
-  function morseUnits(character) {
-    const code = MORSE[String(character).toUpperCase()];
+function morseUnits(character) {
+  const code = MORSE[String(character).toUpperCase()];
 
-    if (!code) {
-      return 0;
-    }
-
-    let units = 0;
-
-    for (let index = 0; index < code.length; index++) {
-      units += code[index] === "-" ? CW_DAH : CW_DIT;
-
-      if (index < code.length - 1) {
-        units += CW_ELEMENT_GAP;
-      }
-    }
-
-    return units;
+  if (!code) {
+    return 0;
   }
 
-  function buildCharacterTimeline() {
-    const timeline = [];
-    let units = 0;
+  let units = 0;
 
-    expectedCharacters.forEach((character, index) => {
-      const startUnits = units;
-      const endUnits = startUnits + morseUnits(character);
+  for (let index = 0; index < code.length; index++) {
+    units += code[index] === "-" ? CW_DAH : CW_DIT;
 
-      timeline.push({
-        index,
-        character,
-        startUnits,
-        endUnits,
-      });
+    if (index < code.length - 1) {
+      units += CW_ELEMENT_GAP;
+    }
+  }
 
-      units = endUnits;
+  return units;
+}
 
-      if (index === expectedCharacters.length - 1) {
-        return;
-      }
+function buildCharacterTimeline() {
+  const timeline = [];
+  let units = 0;
 
-      const wordInfo = getSolutionWordInfo(index);
+  expectedCharacters.forEach((character, index) => {
+    const startUnits = units;
+    const endUnits = startUnits + morseUnits(character);
 
-      units += wordInfo.isLastCharacter ? 7 : CW_CHARACTER_GAP;
+    timeline.push({
+      index,
+      character,
+      startUnits,
+      endUnits,
     });
 
-    characterTimeline = timeline;
+    units = endUnits;
 
-    totalUnits = timeline.length ? timeline[timeline.length - 1].endUnits : 0;
+    if (index === expectedCharacters.length - 1) {
+      return;
+    }
 
-    return timeline;
-  }
+    const wordInfo = getSolutionWordInfo(index);
 
-  function buildVisualTimeline() {
-    const timeline = [];
-    let x = 0;
+    units += wordInfo.isLastCharacter ? 7 : CW_CHARACTER_GAP;
+  });
 
-    expectedCharacters.forEach((character, index) => {
-      if (index > 0) {
-        const previousInfo = getSolutionWordInfo(index - 1);
+  characterTimeline = timeline;
 
-        x += previousInfo.isLastCharacter
-          ? GROUP_VISUAL_GAP
-          : CHARACTER_VISUAL_GAP;
-      }
+  totalUnits = timeline.length ? timeline[timeline.length - 1].endUnits : 0;
 
-      timeline.push({
-        index,
-        character,
-        x,
-        width: CHARACTER_VISUAL_WIDTH,
-      });
+  return timeline;
+}
 
-      x += CHARACTER_VISUAL_WIDTH;
+function buildVisualTimeline() {
+  const timeline = [];
+  let x = 0;
+
+  expectedCharacters.forEach((character, index) => {
+    if (index > 0) {
+      const previousInfo = getSolutionWordInfo(index - 1);
+
+      x += previousInfo.isLastCharacter
+        ? GROUP_VISUAL_GAP
+        : CHARACTER_VISUAL_GAP;
+    }
+
+    timeline.push({
+      index,
+      character,
+      x,
+      width: CHARACTER_VISUAL_WIDTH,
     });
 
-    visualTimeline = timeline;
-    totalVisualWidth = Math.max(0, x);
+    x += CHARACTER_VISUAL_WIDTH;
+  });
 
-    return timeline;
-  }
+  visualTimeline = timeline;
+  totalVisualWidth = Math.max(0, x);
 
-  /* ============================================================
+  return timeline;
+}
+
+/* ============================================================
      TIMELINE POSITION
      ============================================================ */
 
-  function getDuration() {
-    return totalUnits ? Math.max(1, totalUnits * getDitMilliseconds()) : 1;
+function getDuration() {
+  return totalUnits ? Math.max(1, totalUnits * getDitMilliseconds()) : 1;
+}
+
+function getElapsedUnits() {
+  const dit = getDitMilliseconds();
+
+  if (!Number.isFinite(dit) || dit <= 0) {
+    return 0;
   }
 
-  function getElapsedUnits() {
-    const dit = getDitMilliseconds();
+  return Math.max(0, elapsed / dit);
+}
 
-    if (!Number.isFinite(dit) || dit <= 0) {
-      return 0;
+function getTimelinePosition() {
+  return Math.max(0, Math.min(totalUnits, getElapsedUnits()));
+}
+
+function getSynchronizedCharacterIndex(units) {
+  if (!characterTimeline.length) {
+    return -1;
+  }
+
+  let index = -1;
+
+  for (let current = 0; current < characterTimeline.length; current++) {
+    if (units >= characterTimeline[current].startUnits) {
+      index = current;
+    } else {
+      break;
     }
-
-    return Math.max(0, elapsed / dit);
   }
 
-  function getTimelinePosition() {
-    return Math.max(0, Math.min(totalUnits, getElapsedUnits()));
-  }
+  return index;
+}
 
-  function getSynchronizedCharacterIndex(units) {
-    if (!characterTimeline.length) {
-      return -1;
-    }
+function updateSynchronizedState() {
+  const index = getSynchronizedCharacterIndex(getTimelinePosition());
 
-    let index = -1;
+  currentTimelineIndex = index;
 
-    for (let current = 0; current < characterTimeline.length; current++) {
-      if (units >= characterTimeline[current].startUnits) {
-        index = current;
-      } else {
-        break;
-      }
-    }
+  visibleCharacterCount =
+    index < 0 ? 0 : Math.min(index + 1, expectedCharacters.length);
+}
 
-    return index;
-  }
-
-  function updateSynchronizedState() {
-    const index = getSynchronizedCharacterIndex(getTimelinePosition());
-
-    currentTimelineIndex = index;
-
-    visibleCharacterCount =
-      index < 0 ? 0 : Math.min(index + 1, expectedCharacters.length);
-  }
-
-  /* ============================================================
+/* ============================================================
      SOLUTION DISPLAY
      ============================================================ */
 
-  function createSolutionCharacter(expected, typed, visible) {
-    const element = document.createElement("span");
+function createSolutionCharacter(expected, typed, visible) {
+  const element = document.createElement("span");
 
-    element.className = "cwtype-solution-character";
+  element.className = "cwtype-solution-character";
 
-    if (!visible) {
-      return element;
-    }
+  if (!visible) {
+    return element;
+  }
 
-    if (typed === null || typed === "") {
-      element.textContent = "_";
-      element.classList.add("missing");
-      element.title = "Erwartet: " + expected;
-
-      return element;
-    }
-
-    element.textContent = String(typed);
-
-    if (String(typed).toUpperCase() === String(expected).toUpperCase()) {
-      element.classList.add("correct");
-
-      return element;
-    }
-
-    element.classList.add("wrong");
+  if (typed === null || typed === "") {
+    element.textContent = "_";
+    element.classList.add("missing");
     element.title = "Erwartet: " + expected;
 
     return element;
   }
 
-  function createSolutionRange(startIndex, endIndex) {
-    const container = document.createElement("span");
+  element.textContent = String(typed);
 
-    for (let index = startIndex; index < endIndex; index++) {
-      container.appendChild(
-        createSolutionCharacter(
-          expectedCharacters[index],
-          typedSequence[index],
-          index < visibleCharacterCount,
-        ),
-      );
-
-      if (index < endIndex - 1) {
-        const gap = document.createElement("span");
-
-        gap.className = "cwtype-solution-character-gap";
-
-        container.appendChild(gap);
-      }
-    }
-
-    return container;
-  }
-
-  function appendSolutionGroupGap() {
-    const gap = document.createElement("span");
-
-    gap.className = "cwtype-solution-group-gap";
-    gap.textContent = " ";
-
-    solutionElement.appendChild(gap);
-  }
-
-  function updateSolution() {
-    if (!solutionElement) {
-      return;
-    }
-
-    const active = showSolutionButton?.dataset.active === "true";
-
-    if (!active) {
-      solutionElement.hidden = true;
-      return;
-    }
-
-    solutionElement.hidden = false;
-    solutionElement.replaceChildren();
-
-    if (!expectedCharacters.length || visibleCharacterCount <= 0) {
-      return;
-    }
-
-    const visibleCount = Math.min(
-      visibleCharacterCount,
-      expectedCharacters.length,
-    );
-
-    solutionWords.forEach((word, wordIndex) => {
-      if (visibleCount <= word.start) {
-        return;
-      }
-
-      if (wordIndex > 0) {
-        appendSolutionGroupGap();
-      }
-
-      const end = Math.min(visibleCount, word.end);
-
-      if (end > word.start) {
-        solutionElement.appendChild(createSolutionRange(word.start, end));
-      }
-    });
-  }
-
-  function showSolution() {
-    if (!solutionElement) {
-      return;
-    }
-
-    if (showSolutionButton) {
-      showSolutionButton.dataset.active = "true";
-    }
-
-    updateSolution();
-  }
-
-  function toggleSolution() {
-    if (!solutionElement) {
-      return;
-    }
-
-    const active = showSolutionButton?.dataset.active === "true";
-
-    if (active) {
-      showSolutionButton.dataset.active = "false";
-      solutionElement.hidden = true;
-      return;
-    }
-
-    showSolution();
-  }
-
-  function resetSolution() {
-    morseInput = "";
-    keyDownCharacterIndex = -1;
-
-    if (characterTimer !== null) {
-      clearTimeout(characterTimer);
-      characterTimer = null;
-    }
-
-    currentTimelineIndex = -1;
-    visibleCharacterCount = 0;
-
-    typedSequence = expectedCharacters.map(() => null);
-
-    if (showSolutionButton) {
-      showSolutionButton.dataset.active = "false";
-    }
-
-    if (solutionElement) {
-      solutionElement.hidden = true;
-      solutionElement.replaceChildren();
-    }
-  }
-
-  /* ============================================================
-     TRACK
-     ============================================================ */
-
-  function createCharacterElement(character, index) {
-    const element = document.createElement("span");
-
-    element.className = "cwtype-character";
-    element.dataset.index = String(index);
-    element.textContent = String(character);
+  if (String(typed).toUpperCase() === String(expected).toUpperCase()) {
+    element.classList.add("correct");
 
     return element;
   }
 
-  function createTrack() {
-    if (!track) {
-      throw new Error("cwtype-track nicht gefunden.");
-    }
+  element.classList.add("wrong");
+  element.title = "Erwartet: " + expected;
 
-    track.replaceChildren();
+  return element;
+}
 
-    currentGroups = createTrainingGroups();
+function createSolutionRange(startIndex, endIndex) {
+  const container = document.createElement("span");
 
-    buildExpectedCharacters();
-    buildCharacterTimeline();
-    buildVisualTimeline();
-
-    resetSolution();
-
-    const line = document.createElement("div");
-
-    line.className = "cwtype-line";
-    line.style.width = `${totalVisualWidth}px`;
-
-    visualTimeline.forEach((visualItem) => {
-      const element = createCharacterElement(
-        visualItem.character,
-        visualItem.index,
-      );
-
-      element.style.left = `${visualItem.x}px`;
-
-      line.appendChild(element);
-    });
-
-    track.appendChild(line);
-
-    if (showSolutionButton) {
-      showSolutionButton.disabled = expectedCharacters.length === 0;
-
-      showSolutionButton.dataset.active = "false";
-    }
-
-    if (solutionElement) {
-      solutionElement.hidden = true;
-    }
-
-    return line;
-  }
-
-  function layout() {
-    if (!laufband || !marker) {
-      return;
-    }
-
-    const band = laufband.getBoundingClientRect();
-    const markerRect = marker.getBoundingClientRect();
-
-    markerX = markerRect.left - band.left + markerRect.width / 2;
-  }
-
-  function getVisualXForUnits(units) {
-    if (!characterTimeline.length || !visualTimeline.length) {
-      return 0;
-    }
-
-    if (units <= characterTimeline[0].startUnits) {
-      return visualTimeline[0].x + CHARACTER_VISUAL_WIDTH / 2;
-    }
-
-    const lastTimeline = characterTimeline[characterTimeline.length - 1];
-
-    const lastVisual = visualTimeline[visualTimeline.length - 1];
-
-    if (units >= lastTimeline.endUnits) {
-      return lastVisual.x + CHARACTER_VISUAL_WIDTH / 2;
-    }
-
-    const index = getSynchronizedCharacterIndex(units);
-
-    if (index < 0) {
-      return visualTimeline[0].x + CHARACTER_VISUAL_WIDTH / 2;
-    }
-
-    const current = characterTimeline[index];
-    const visualCurrent = visualTimeline[index];
-
-    if (index >= characterTimeline.length - 1) {
-      return visualCurrent.x + CHARACTER_VISUAL_WIDTH / 2;
-    }
-
-    const next = characterTimeline[index + 1];
-    const visualNext = visualTimeline[index + 1];
-
-    const interval = Math.max(0.0001, next.startUnits - current.startUnits);
-
-    const progress = Math.max(
-      0,
-      Math.min(1, (units - current.startUnits) / interval),
+  for (let index = startIndex; index < endIndex; index++) {
+    container.appendChild(
+      createSolutionCharacter(
+        expectedCharacters[index],
+        typedSequence[index],
+        index < visibleCharacterCount,
+      ),
     );
 
-    const currentCenter = visualCurrent.x + CHARACTER_VISUAL_WIDTH / 2;
+    if (index < endIndex - 1) {
+      const gap = document.createElement("span");
 
-    const nextCenter = visualNext.x + CHARACTER_VISUAL_WIDTH / 2;
+      gap.className = "cwtype-solution-character-gap";
 
-    return currentCenter + (nextCenter - currentCenter) * progress;
+      container.appendChild(gap);
+    }
   }
 
-  function setTrackPositionForUnits(units) {
-    const line = track?.querySelector(".cwtype-line");
+  return container;
+}
 
-    if (!line) {
+function appendSolutionGroupGap() {
+  const gap = document.createElement("span");
+
+  gap.className = "cwtype-solution-group-gap";
+  gap.textContent = " ";
+
+  solutionElement.appendChild(gap);
+}
+
+function updateSolution() {
+  if (!solutionElement) {
+    return;
+  }
+
+  const active = showSolutionButton?.dataset.active === "true";
+
+  if (!active) {
+    solutionElement.hidden = true;
+    return;
+  }
+
+  solutionElement.hidden = false;
+  solutionElement.replaceChildren();
+
+  if (!expectedCharacters.length || visibleCharacterCount <= 0) {
+    return;
+  }
+
+  const visibleCount = Math.min(
+    visibleCharacterCount,
+    expectedCharacters.length,
+  );
+
+  solutionWords.forEach((word, wordIndex) => {
+    if (visibleCount <= word.start) {
       return;
     }
 
-    const visualX = getVisualXForUnits(units);
+    if (wordIndex > 0) {
+      appendSolutionGroupGap();
+    }
 
-    line.style.left = markerX - visualX + "px";
+    const end = Math.min(visibleCount, word.end);
+
+    if (end > word.start) {
+      solutionElement.appendChild(createSolutionRange(word.start, end));
+    }
+  });
+}
+
+function showSolution() {
+  if (!solutionElement) {
+    return;
   }
 
-  function setTrackAtStart() {
-    setTrackPositionForUnits(0);
+  if (showSolutionButton) {
+    showSolutionButton.dataset.active = "true";
   }
 
-  function setTrackAtEnd() {
-    setTrackPositionForUnits(totalUnits);
+  updateSolution();
+}
+
+function toggleSolution() {
+  if (!solutionElement) {
+    return;
   }
 
-  /* ============================================================
+  const active = showSolutionButton?.dataset.active === "true";
+
+  if (active) {
+    showSolutionButton.dataset.active = "false";
+    solutionElement.hidden = true;
+    return;
+  }
+
+  showSolution();
+}
+
+function resetSolution() {
+  morseInput = "";
+  keyDownCharacterIndex = -1;
+
+  if (characterTimer !== null) {
+    clearTimeout(characterTimer);
+    characterTimer = null;
+  }
+
+  currentTimelineIndex = -1;
+  visibleCharacterCount = 0;
+
+  typedSequence = expectedCharacters.map(() => null);
+
+  if (showSolutionButton) {
+    showSolutionButton.dataset.active = "false";
+  }
+
+  if (solutionElement) {
+    solutionElement.hidden = true;
+    solutionElement.replaceChildren();
+  }
+}
+
+/* ============================================================
+     TRACK
+     ============================================================ */
+
+function createCharacterElement(character, index) {
+  const element = document.createElement("span");
+
+  element.className = "cwtype-character";
+  element.dataset.index = String(index);
+  element.textContent = String(character);
+
+  return element;
+}
+
+function createTrack() {
+  if (!track) {
+    throw new Error("cwtype-track nicht gefunden.");
+  }
+
+  track.replaceChildren();
+
+  currentGroups = createTrainingGroups();
+
+  buildExpectedCharacters();
+  buildCharacterTimeline();
+  buildVisualTimeline();
+
+  resetSolution();
+
+  const line = document.createElement("div");
+
+  line.className = "cwtype-line";
+  line.style.width = `${totalVisualWidth}px`;
+
+  visualTimeline.forEach((visualItem) => {
+    const element = createCharacterElement(
+      visualItem.character,
+      visualItem.index,
+    );
+
+    element.style.left = `${visualItem.x}px`;
+
+    line.appendChild(element);
+  });
+
+  track.appendChild(line);
+
+  if (showSolutionButton) {
+    showSolutionButton.disabled = expectedCharacters.length === 0;
+
+    showSolutionButton.dataset.active = "false";
+  }
+
+  if (solutionElement) {
+    solutionElement.hidden = true;
+  }
+
+  return line;
+}
+
+function layout() {
+  if (!laufband || !marker) {
+    return;
+  }
+
+  const band = laufband.getBoundingClientRect();
+  const markerRect = marker.getBoundingClientRect();
+
+  markerX = markerRect.left - band.left + markerRect.width / 2;
+}
+
+function getVisualXForUnits(units) {
+  if (!characterTimeline.length || !visualTimeline.length) {
+    return 0;
+  }
+
+  if (units <= characterTimeline[0].startUnits) {
+    return visualTimeline[0].x + CHARACTER_VISUAL_WIDTH / 2;
+  }
+
+  const lastTimeline = characterTimeline[characterTimeline.length - 1];
+
+  const lastVisual = visualTimeline[visualTimeline.length - 1];
+
+  if (units >= lastTimeline.endUnits) {
+    return lastVisual.x + CHARACTER_VISUAL_WIDTH / 2;
+  }
+
+  const index = getSynchronizedCharacterIndex(units);
+
+  if (index < 0) {
+    return visualTimeline[0].x + CHARACTER_VISUAL_WIDTH / 2;
+  }
+
+  const current = characterTimeline[index];
+  const visualCurrent = visualTimeline[index];
+
+  if (index >= characterTimeline.length - 1) {
+    return visualCurrent.x + CHARACTER_VISUAL_WIDTH / 2;
+  }
+
+  const next = characterTimeline[index + 1];
+  const visualNext = visualTimeline[index + 1];
+
+  const interval = Math.max(0.0001, next.startUnits - current.startUnits);
+
+  const progress = Math.max(
+    0,
+    Math.min(1, (units - current.startUnits) / interval),
+  );
+
+  const currentCenter = visualCurrent.x + CHARACTER_VISUAL_WIDTH / 2;
+
+  const nextCenter = visualNext.x + CHARACTER_VISUAL_WIDTH / 2;
+
+  return currentCenter + (nextCenter - currentCenter) * progress;
+}
+
+function setTrackPositionForUnits(units) {
+  const line = track?.querySelector(".cwtype-line");
+
+  if (!line) {
+    return;
+  }
+
+  const visualX = getVisualXForUnits(units);
+
+  line.style.left = markerX - visualX + "px";
+}
+
+function setTrackAtStart() {
+  setTrackPositionForUnits(0);
+}
+
+function setTrackAtEnd() {
+  setTrackPositionForUnits(totalUnits);
+}
+
+/* ============================================================
      ANIMATION
      ============================================================ */
 
-  function stopAnimation() {
-    if (animationFrame !== null) {
-      cancelAnimationFrame(animationFrame);
-      animationFrame = null;
-    }
+function stopAnimation() {
+  if (animationFrame !== null) {
+    cancelAnimationFrame(animationFrame);
+    animationFrame = null;
+  }
+}
+
+function animate(timestamp) {
+  if (!running || paused) {
+    return;
   }
 
-  function animate(timestamp) {
-    if (!running || paused) {
-      return;
-    }
+  elapsed = Math.max(0, timestamp - startTime);
 
-    elapsed = Math.max(0, timestamp - startTime);
-
-    if (elapsed >= duration) {
-      elapsed = duration;
-
-      setTrackAtEnd();
-
-      currentTimelineIndex = expectedCharacters.length - 1;
-
-      visibleCharacterCount = expectedCharacters.length;
-
-      updateSolution();
-      finish();
-
-      return;
-    }
-
-    const units = getTimelinePosition();
-
-    setTrackPositionForUnits(units);
-
-    updateSynchronizedState();
-    updateSolution();
-
-    animationFrame = requestAnimationFrame(animate);
-  }
-
-  /* ============================================================
-     AUDIO
-     ============================================================ */
-
-  async function ensureAudio() {
-    if (
-      typeof INCWAudio === "undefined" ||
-      typeof INCWAudio.start !== "function"
-    ) {
-      return false;
-    }
-
-    try {
-      const audio = await INCWAudio.start();
-
-      return !!audio && audio.state === "running";
-    } catch (error) {
-      console.error("Audio:", error);
-
-      return false;
-    }
-  }
-
-  async function toneStart() {
-    if (!(await ensureAudio())) {
-      return;
-    }
-
-    try {
-      INCWAudio.tone(
-        getToneFrequency(),
-        getDitMilliseconds() / 1000,
-        getVolume(),
-      );
-    } catch (error) {
-      console.error(error);
-    }
-  }
-
-  function toneStop() {
-    if (
-      typeof INCWAudio !== "undefined" &&
-      typeof INCWAudio.stop === "function"
-    ) {
-      try {
-        INCWAudio.stop();
-      } catch (error) {
-        console.error(error);
-      }
-    }
-  }
-
-  /* ============================================================
-     MORSE INPUT
-     ============================================================ */
-
-  function addMorseElement(element) {
-    if (element === "." || element === "-") {
-      morseInput += element;
-    }
-  }
-
-  function finishMorseCharacter() {
-    if (!morseInput) {
-      return;
-    }
-
-    const character = MORSE_REVERSE[morseInput] || "?";
-
-    const targetIndex =
-      keyDownCharacterIndex >= 0 ? keyDownCharacterIndex : currentTimelineIndex;
-
-    if (targetIndex >= 0 && targetIndex < expectedCharacters.length) {
-      typedSequence[targetIndex] = character;
-
-      visibleCharacterCount = Math.max(visibleCharacterCount, targetIndex + 1);
-    }
-
-    morseInput = "";
-    keyDownCharacterIndex = -1;
-
-    updateSolution();
-  }
-
-  function finishKeyStroke() {
-    if (!keyDownStarted) {
-      return;
-    }
-
-    const durationMs = performance.now() - keyDownStarted;
-
-    keyDownStarted = 0;
-    keyDown = false;
-
-    toneStop();
-
-    const element = durationMs >= getDitMilliseconds() * 2 ? "-" : ".";
-
-    addMorseElement(element);
-  }
-
-  function scheduleCharacterFinish() {
-    if (characterTimer !== null) {
-      clearTimeout(characterTimer);
-    }
-
-    characterTimer = window.setTimeout(() => {
-      characterTimer = null;
-      finishMorseCharacter();
-    }, getDitMilliseconds() * 3);
-  }
-
-  /* ============================================================
-     KEYBOARD INPUT
-     ============================================================ */
-
-  async function handleSpaceDown(event) {
-    if (event.code !== "Space") {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (event.repeat) {
-      return;
-    }
-
-    if (event.ctrlKey) {
-      ignoreSpaceKeyUp = true;
-
-      if (keyDown) {
-        finishKeyStroke();
-      }
-
-      togglePause();
-      return;
-    }
-
-    if (!running) {
-      await start();
-    }
-
-    if (!running || paused || keyDown) {
-      return;
-    }
-
-    if (characterTimer !== null) {
-      clearTimeout(characterTimer);
-      characterTimer = null;
-    }
-
-    updateSynchronizedState();
-
-    keyDownCharacterIndex = currentTimelineIndex;
-
-    if (
-      keyDownCharacterIndex < 0 ||
-      keyDownCharacterIndex >= expectedCharacters.length
-    ) {
-      keyDownCharacterIndex = -1;
-      return;
-    }
-
-    keyDown = true;
-    keyDownStarted = performance.now();
-
-    await toneStart();
-  }
-
-  function handleSpaceUp(event) {
-    if (event.code !== "Space") {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (ignoreSpaceKeyUp) {
-      ignoreSpaceKeyUp = false;
-      return;
-    }
-
-    if (event.ctrlKey || !keyDown) {
-      return;
-    }
-
-    finishKeyStroke();
-    scheduleCharacterFinish();
-  }
-
-  function handleControlX(event) {
-    if (!event.ctrlKey || event.key.toLowerCase() !== "x") {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (keyDown) {
-      finishKeyStroke();
-    }
-
-    finishMorseCharacter();
-    updateSynchronizedState();
-
-    stop();
-    showSolution();
-  }
-
-  function handleWindowBlur() {
-    if (keyDown) {
-      finishKeyStroke();
-    } else {
-      toneStop();
-    }
-  }
-
-  /* ============================================================
-     BUTTONS
-     ============================================================ */
-
-  function updateButtons(active) {
-    if (startButton) {
-      startButton.disabled = active;
-    }
-
-    if (pauseButton) {
-      pauseButton.disabled = !active;
-      pauseButton.textContent = paused ? "▶ Resume" : "⏸ Pause";
-    }
-
-    if (stopButton) {
-      stopButton.disabled = !active;
-    }
-  }
-
-  /* ============================================================
-     TRAINING CONTROL
-     ============================================================ */
-
-  function rebuild() {
-    stopAnimation();
-
-    running = false;
-    paused = false;
-    elapsed = 0;
-
-    toneStop();
-
-    if (keyDown) {
-      finishKeyStroke();
-    }
-
-    finishMorseCharacter();
-
-    if (!track) {
-      return;
-    }
-
-    track.style.visibility = "hidden";
-
-    try {
-      createTrack();
-
-      requestAnimationFrame(() => {
-        layout();
-        setTrackAtStart();
-
-        duration = getDuration();
-
-        track.style.visibility = "visible";
-
-        updateButtons(false);
-      });
-    } catch (error) {
-      console.error("CW rebuild:", error);
-
-      track.style.visibility = "visible";
-    }
-  }
-
-  async function start() {
-    if (running) {
-      return;
-    }
-
-    await ensureAudio();
-
-    stopAnimation();
-
-    track.style.visibility = "hidden";
-
-    try {
-      createTrack();
-
-      requestAnimationFrame(() => {
-        layout();
-
-        duration = getDuration();
-
-        elapsed = 0;
-        currentTimelineIndex = -1;
-        visibleCharacterCount = 0;
-
-        typedSequence = expectedCharacters.map(() => null);
-
-        keyDownCharacterIndex = -1;
-        morseInput = "";
-
-        if (characterTimer !== null) {
-          clearTimeout(characterTimer);
-          characterTimer = null;
-        }
-
-        running = true;
-        paused = false;
-
-        setTrackAtStart();
-
-        startTime = performance.now();
-
-        track.style.visibility = "visible";
-
-        updateButtons(true);
-        updateSynchronizedState();
-        updateSolution();
-
-        animationFrame = requestAnimationFrame(animate);
-      });
-    } catch (error) {
-      console.error("CW start:", error);
-
-      track.style.visibility = "visible";
-    }
-  }
-
-  function togglePause() {
-    if (!running) {
-      return;
-    }
-
-    if (!paused) {
-      elapsed = Math.max(0, Math.min(duration, performance.now() - startTime));
-
-      updateSynchronizedState();
-      setTrackPositionForUnits(getTimelinePosition());
-
-      paused = true;
-
-      toneStop();
-      stopAnimation();
-
-      if (pauseButton) {
-        pauseButton.textContent = "▶ Resume";
-      }
-
-      return;
-    }
-
-    startTime = performance.now() - elapsed;
-
-    paused = false;
-
-    if (pauseButton) {
-      pauseButton.textContent = "⏸ Pause";
-    }
-
-    animationFrame = requestAnimationFrame(animate);
-  }
-
-  function stop() {
-    if (running) {
-      elapsed = Math.max(0, Math.min(duration, performance.now() - startTime));
-
-      updateSynchronizedState();
-
-      setTrackPositionForUnits(getTimelinePosition());
-    }
-
-    stopAnimation();
-
-    running = false;
-    paused = false;
-
-    toneStop();
-
-    if (keyDown) {
-      finishKeyStroke();
-    }
-
-    finishMorseCharacter();
-
-    updateSynchronizedState();
-    updateSolution();
-    updateButtons(false);
-  }
-
-  function finish() {
+  if (elapsed >= duration) {
     elapsed = duration;
+
+    setTrackAtEnd();
 
     currentTimelineIndex = expectedCharacters.length - 1;
 
     visibleCharacterCount = expectedCharacters.length;
 
-    stopAnimation();
+    updateSolution();
+    finish();
 
-    running = false;
-    paused = false;
+    return;
+  }
 
-    toneStop();
-    setTrackAtEnd();
+  const units = getTimelinePosition();
+
+  setTrackPositionForUnits(units);
+
+  updateSynchronizedState();
+  updateSolution();
+
+  animationFrame = requestAnimationFrame(animate);
+}
+
+/* ============================================================
+     AUDIO
+     ============================================================ */
+
+async function ensureAudio() {
+  if (
+    typeof INCWAudio === "undefined" ||
+    typeof INCWAudio.start !== "function"
+  ) {
+    return false;
+  }
+
+  try {
+    const audio = await INCWAudio.start();
+
+    return !!audio && audio.state === "running";
+  } catch (error) {
+    console.error("Audio:", error);
+
+    return false;
+  }
+}
+
+async function toneStart() {
+  if (!(await ensureAudio())) {
+    return;
+  }
+
+  try {
+    INCWAudio.tone(
+      getToneFrequency(),
+      getDitMilliseconds() / 1000,
+      getVolume(),
+    );
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function toneStop() {
+  if (
+    typeof INCWAudio !== "undefined" &&
+    typeof INCWAudio.stop === "function"
+  ) {
+    try {
+      INCWAudio.stop();
+    } catch (error) {
+      console.error(error);
+    }
+  }
+}
+
+/* ============================================================
+     MORSE INPUT
+     ============================================================ */
+
+function addMorseElement(element) {
+  if (element === "." || element === "-") {
+    morseInput += element;
+  }
+}
+
+function finishMorseCharacter() {
+  if (!morseInput) {
+    return;
+  }
+
+  const character = MORSE_REVERSE[morseInput] || "?";
+
+  const targetIndex =
+    keyDownCharacterIndex >= 0 ? keyDownCharacterIndex : currentTimelineIndex;
+
+  if (targetIndex >= 0 && targetIndex < expectedCharacters.length) {
+    typedSequence[targetIndex] = character;
+
+    visibleCharacterCount = Math.max(visibleCharacterCount, targetIndex + 1);
+
+    currentTimelineIndex = Math.min(
+      targetIndex + 1,
+      expectedCharacters.length - 1,
+    );
+  }
+
+  morseInput = "";
+  keyDownCharacterIndex = -1;
+
+  updateSolution();
+}
+
+function finishKeyStroke() {
+  if (!keyDownStarted) {
+    return;
+  }
+
+  const durationMs = performance.now() - keyDownStarted;
+
+  keyDownStarted = 0;
+  keyDown = false;
+
+  toneStop();
+
+  const element = durationMs >= getDitMilliseconds() * 3.5 ? "-" : ".";
+
+  addMorseElement(element);
+}
+
+function scheduleCharacterFinish() {
+  if (characterTimer !== null) {
+    clearTimeout(characterTimer);
+  }
+
+  characterTimer = window.setTimeout(() => {
+    characterTimer = null;
+    finishMorseCharacter();
+  }, getDitMilliseconds() * 1.5);
+}
+
+/* ============================================================
+     KEYBOARD INPUT
+     ============================================================ */
+
+async function handleSpaceDown(event) {
+  if (event.code !== "Space") {
+    return;
+  }
+
+  event.preventDefault();
+
+  if (event.repeat) {
+    return;
+  }
+
+  if (event.ctrlKey) {
+    ignoreSpaceKeyUp = true;
 
     if (keyDown) {
       finishKeyStroke();
     }
 
-    finishMorseCharacter();
-
-    updateButtons(false);
-    updateSolution();
+    togglePause();
+    return;
   }
 
-  /* ============================================================
+  if (!running) {
+    await start();
+  }
+
+  if (!running || paused || keyDown) {
+    return;
+  }
+
+  if (characterTimer !== null) {
+    clearTimeout(characterTimer);
+    characterTimer = null;
+  }
+
+  updateSynchronizedState();
+
+  keyDownCharacterIndex = currentTimelineIndex;
+
+  if (
+    keyDownCharacterIndex < 0 ||
+    keyDownCharacterIndex >= expectedCharacters.length
+  ) {
+    keyDownCharacterIndex = -1;
+    return;
+  }
+
+  keyDown = true;
+  keyDownStarted = performance.now();
+
+  await toneStart();
+}
+
+function handleSpaceUp(event) {
+  if (event.code !== "Space") {
+    return;
+  }
+
+  event.preventDefault();
+
+  if (ignoreSpaceKeyUp) {
+    ignoreSpaceKeyUp = false;
+    return;
+  }
+
+  if (event.ctrlKey || !keyDown) {
+    return;
+  }
+
+  finishKeyStroke();
+  scheduleCharacterFinish();
+}
+
+function handleControlX(event) {
+  if (!event.ctrlKey || event.key.toLowerCase() !== "x") {
+    return;
+  }
+
+  event.preventDefault();
+
+  if (keyDown) {
+    finishKeyStroke();
+  }
+
+  finishMorseCharacter();
+  updateSynchronizedState();
+
+  stop();
+  showSolution();
+}
+
+function handleWindowBlur() {
+  if (keyDown) {
+    finishKeyStroke();
+  } else {
+    toneStop();
+  }
+}
+
+/* ============================================================
+     BUTTONS
+     ============================================================ */
+
+function updateButtons(active) {
+  if (startButton) {
+    startButton.disabled = active;
+  }
+
+  if (pauseButton) {
+    pauseButton.disabled = !active;
+    pauseButton.textContent = paused ? "▶ Resume" : "⏸ Pause";
+  }
+
+  if (stopButton) {
+    stopButton.disabled = !active;
+  }
+}
+
+/* ============================================================
+     TRAINING CONTROL
+     ============================================================ */
+
+function rebuild() {
+  stopAnimation();
+
+  running = false;
+  paused = false;
+  elapsed = 0;
+
+  toneStop();
+
+  if (keyDown) {
+    finishKeyStroke();
+  }
+
+  finishMorseCharacter();
+
+  if (!track) {
+    return;
+  }
+
+  track.style.visibility = "hidden";
+
+  try {
+    createTrack();
+
+    requestAnimationFrame(() => {
+      layout();
+      setTrackAtStart();
+
+      duration = getDuration();
+
+      track.style.visibility = "visible";
+
+      updateButtons(false);
+    });
+  } catch (error) {
+    console.error("CW rebuild:", error);
+
+    track.style.visibility = "visible";
+  }
+}
+
+async function start() {
+  if (running) {
+    return;
+  }
+
+  await ensureAudio();
+
+  stopAnimation();
+
+  track.style.visibility = "hidden";
+
+  try {
+    createTrack();
+
+    requestAnimationFrame(() => {
+      layout();
+
+      duration = getDuration();
+
+      elapsed = 0;
+      currentTimelineIndex = -1;
+      visibleCharacterCount = 0;
+
+      typedSequence = expectedCharacters.map(() => null);
+
+      keyDownCharacterIndex = -1;
+      morseInput = "";
+
+      if (characterTimer !== null) {
+        clearTimeout(characterTimer);
+        characterTimer = null;
+      }
+
+      running = true;
+      paused = false;
+
+      setTrackAtStart();
+
+      startTime = performance.now();
+
+      track.style.visibility = "visible";
+
+      updateButtons(true);
+      updateSynchronizedState();
+      updateSolution();
+
+      animationFrame = requestAnimationFrame(animate);
+    });
+  } catch (error) {
+    console.error("CW start:", error);
+
+    track.style.visibility = "visible";
+  }
+}
+
+function togglePause() {
+  if (!running) {
+    return;
+  }
+
+  if (!paused) {
+    elapsed = Math.max(0, Math.min(duration, performance.now() - startTime));
+
+    updateSynchronizedState();
+    setTrackPositionForUnits(getTimelinePosition());
+
+    paused = true;
+
+    toneStop();
+    stopAnimation();
+
+    if (pauseButton) {
+      pauseButton.textContent = "▶ Resume";
+    }
+
+    return;
+  }
+
+  startTime = performance.now() - elapsed;
+
+  paused = false;
+
+  if (pauseButton) {
+    pauseButton.textContent = "⏸ Pause";
+  }
+
+  animationFrame = requestAnimationFrame(animate);
+}
+
+function stop() {
+  if (running) {
+    elapsed = Math.max(0, Math.min(duration, performance.now() - startTime));
+
+    updateSynchronizedState();
+
+    setTrackPositionForUnits(getTimelinePosition());
+  }
+
+  stopAnimation();
+
+  running = false;
+  paused = false;
+
+  toneStop();
+
+  if (keyDown) {
+    finishKeyStroke();
+  }
+
+  finishMorseCharacter();
+
+  updateSynchronizedState();
+  updateSolution();
+  updateButtons(false);
+}
+
+function finish() {
+  elapsed = duration;
+
+  currentTimelineIndex = expectedCharacters.length - 1;
+
+  visibleCharacterCount = expectedCharacters.length;
+
+  stopAnimation();
+
+  running = false;
+  paused = false;
+
+  toneStop();
+  setTrackAtEnd();
+
+  if (keyDown) {
+    finishKeyStroke();
+  }
+
+  finishMorseCharacter();
+
+  updateButtons(false);
+  updateSolution();
+}
+
+/* ============================================================
      METHOD SELECTION
      ============================================================ */
 
-  function rebuildMethods(selectId = null) {
-    if (!methodSelect) {
-      return;
-    }
-
-    const allMethods = getAllMethods();
-    const previousId = selectId || currentMethod?.id || null;
-
-    methodSelect.replaceChildren();
-
-    allMethods.forEach((method) => {
-      const option = document.createElement("option");
-
-      option.value = method.id;
-      option.textContent = method.name || method.id;
-
-      methodSelect.appendChild(option);
-    });
-
-    if (!allMethods.length) {
-      currentMethod = null;
-      abbreviationData = [];
-
-      populateLessons();
-      rebuild();
-
-      return;
-    }
-
-    const exists = allMethods.some((method) => method.id === previousId);
-
-    methodSelect.value = exists ? previousId : allMethods[0].id;
-
-    selectMethod();
+function rebuildMethods(selectId = null) {
+  if (!methodSelect) {
+    return;
   }
 
-  async function selectMethod() {
-    const method = getAllMethods().find(
-      (item) => item.id === methodSelect.value,
-    );
+  const allMethods = getAllMethods();
+  const previousId = selectId || currentMethod?.id || null;
 
-    if (!method) {
-      return;
-    }
+  methodSelect.replaceChildren();
 
-    currentMethod = method;
-    currentLesson = 1;
+  allMethods.forEach((method) => {
+    const option = document.createElement("option");
 
-    stop();
+    option.value = method.id;
+    option.textContent = method.name || method.id;
 
-    try {
-      await loadAbbreviations();
-    } catch (error) {
-      console.error(error);
-      abbreviationData = [];
-    }
+    methodSelect.appendChild(option);
+  });
+
+  if (!allMethods.length) {
+    currentMethod = null;
+    abbreviationData = [];
 
     populateLessons();
-
-    if (lessonSelect?.options.length) {
-      lessonSelect.value = "1";
-    }
-
     rebuild();
+
+    return;
   }
 
-  function selectLesson() {
-    const value = Number(lessonSelect.value);
+  const exists = allMethods.some((method) => method.id === previousId);
 
-    const count = getLessonCount();
+  methodSelect.value = exists ? previousId : allMethods[0].id;
 
-    currentLesson =
-      Number.isFinite(value) && value >= 1
-        ? Math.min(Math.floor(value), count)
-        : 1;
+  selectMethod();
+}
 
-    rebuild();
+async function selectMethod() {
+  const method = getAllMethods().find((item) => item.id === methodSelect.value);
+
+  if (!method) {
+    return;
   }
 
-  /* ============================================================
+  currentMethod = method;
+  currentLesson = 1;
+
+  stop();
+
+  try {
+    await loadAbbreviations();
+  } catch (error) {
+    console.error(error);
+    abbreviationData = [];
+  }
+
+  populateLessons();
+
+  if (lessonSelect?.options.length) {
+    lessonSelect.value = "1";
+  }
+
+  rebuild();
+}
+
+function selectLesson() {
+  const value = Number(lessonSelect.value);
+
+  const count = getLessonCount();
+
+  currentLesson =
+    Number.isFinite(value) && value >= 1
+      ? Math.min(Math.floor(value), count)
+      : 1;
+
+  rebuild();
+}
+
+/* ============================================================
      CUSTOM FILES
      ============================================================ */
 
-  function renderCustomFiles() {
-    if (!customFilesElement) {
-      return;
-    }
-
-    customFilesElement.replaceChildren();
-
-    customFiles.forEach((file) => {
-      const row = document.createElement("div");
-
-      row.className = "custom-file";
-
-      const name = document.createElement("span");
-
-      name.textContent = file.name;
-
-      const button = document.createElement("button");
-
-      button.type = "button";
-      button.className = "custom-file-remove";
-      button.textContent = "Remove";
-
-      button.addEventListener("click", () => {
-        customFiles = customFiles.filter((item) => item.id !== file.id);
-
-        renderCustomFiles();
-        rebuildMethods();
-      });
-
-      row.append(name, button);
-      customFilesElement.appendChild(row);
-    });
+function renderCustomFiles() {
+  if (!customFilesElement) {
+    return;
   }
 
-  async function addCustomFile(file) {
-    const data = parseCSV(await file.text());
+  customFilesElement.replaceChildren();
 
-    const id =
-      "custom-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+  customFiles.forEach((file) => {
+    const row = document.createElement("div");
 
-    customFiles.push({
-      id,
-      name: file.name.replace(/\.csv$/i, ""),
-      data,
+    row.className = "custom-file";
+
+    const name = document.createElement("span");
+
+    name.textContent = file.name;
+
+    const button = document.createElement("button");
+
+    button.type = "button";
+    button.className = "custom-file-remove";
+    button.textContent = "Remove";
+
+    button.addEventListener("click", () => {
+      customFiles = customFiles.filter((item) => item.id !== file.id);
+
+      renderCustomFiles();
+      rebuildMethods();
     });
 
-    renderCustomFiles();
-    rebuildMethods(id);
-  }
+    row.append(name, button);
+    customFilesElement.appendChild(row);
+  });
+}
 
-  /* ============================================================
+async function addCustomFile(file) {
+  const data = parseCSV(await file.text());
+
+  const id = "custom-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+
+  customFiles.push({
+    id,
+    name: file.name.replace(/\.csv$/i, ""),
+    data,
+  });
+
+  renderCustomFiles();
+  rebuildMethods(id);
+}
+
+/* ============================================================
      EVENTS
      ============================================================ */
 
-  window.addEventListener("keydown", handleSpaceDown);
+window.addEventListener("keydown", handleSpaceDown);
 
-  window.addEventListener("keyup", handleSpaceUp);
+window.addEventListener("keyup", handleSpaceUp);
 
-  window.addEventListener("keydown", handleControlX);
+window.addEventListener("keydown", handleControlX);
 
-  window.addEventListener("blur", handleWindowBlur);
+window.addEventListener("blur", handleWindowBlur);
 
-  methodSelect?.addEventListener("change", selectMethod);
+methodSelect?.addEventListener("change", selectMethod);
 
-  lessonSelect?.addEventListener("change", selectLesson);
+lessonSelect?.addEventListener("change", selectLesson);
 
-  groupsInput?.addEventListener("input", () => {
-    if (!running) {
-      rebuild();
-    }
-  });
+groupsInput?.addEventListener("input", () => {
+  if (!running) {
+    rebuild();
+  }
+});
 
-  groupSizeInput?.addEventListener("input", () => {
-    if (!running) {
-      rebuild();
-    }
-  });
+groupSizeInput?.addEventListener("input", () => {
+  if (!running) {
+    rebuild();
+  }
+});
 
-  wpmInput?.addEventListener("input", () => {
-    if (!running) {
-      rebuild();
-    }
-  });
+wpmInput?.addEventListener("input", () => {
+  if (!running) {
+    rebuild();
+  }
+});
 
-  startButton?.addEventListener("click", start);
+startButton?.addEventListener("click", start);
 
-  pauseButton?.addEventListener("click", togglePause);
+pauseButton?.addEventListener("click", togglePause);
 
-  stopButton?.addEventListener("click", stop);
+stopButton?.addEventListener("click", stop);
 
-  showSolutionButton?.addEventListener("click", toggleSolution);
+showSolutionButton?.addEventListener("click", toggleSolution);
 
-  customFileInput?.addEventListener("change", async () => {
-    const file = customFileInput.files?.[0];
+customFileInput?.addEventListener("change", async () => {
+  const file = customFileInput.files?.[0];
 
-    if (!file) {
-      return;
-    }
+  if (!file) {
+    return;
+  }
 
-    try {
-      await addCustomFile(file);
-    } catch (error) {
-      console.error("CSV:", error);
-    }
+  try {
+    await addCustomFile(file);
+  } catch (error) {
+    console.error("CSV:", error);
+  }
 
-    customFileInput.value = "";
-  });
+  customFileInput.value = "";
+});
 
-  window.addEventListener("resize", () => {
-    if (!running) {
-      rebuild();
-    }
-  });
+window.addEventListener("resize", () => {
+  if (!running) {
+    rebuild();
+  }
+});
 
-  /* ============================================================
+/* ============================================================
      INIT
      ============================================================ */
 
-  async function init() {
-    try {
-      const response = await fetch("text/index.json", {
-        cache: "no-store",
-      });
+async function init() {
+  try {
+    const response = await fetch("text/index.json", {
+      cache: "no-store",
+    });
 
-      if (!response.ok) {
-        throw new Error("text/index.json konnte nicht geladen werden.");
-      }
+    if (!response.ok) {
+      throw new Error("text/index.json konnte nicht geladen werden.");
+    }
 
-      const data = await response.json();
+    const data = await response.json();
 
-      methods = Array.isArray(data.methods) ? data.methods.slice() : [];
+    methods = Array.isArray(data.methods) ? data.methods.slice() : [];
 
-      rebuildMethods();
-    } catch (error) {
-      console.error("CW Type Init:", error);
+    rebuildMethods();
+  } catch (error) {
+    console.error("CW Type Init:", error);
 
-      if (track) {
-        track.style.visibility = "visible";
-      }
+    if (track) {
+      track.style.visibility = "visible";
+    }
 
-      if (startButton) {
-        startButton.disabled = true;
-      }
+    if (startButton) {
+      startButton.disabled = true;
+    }
 
-      if (pauseButton) {
-        pauseButton.disabled = true;
-      }
+    if (pauseButton) {
+      pauseButton.disabled = true;
+    }
 
-      if (stopButton) {
-        stopButton.disabled = true;
-      }
+    if (stopButton) {
+      stopButton.disabled = true;
+    }
 
-      if (showSolutionButton) {
-        showSolutionButton.disabled = true;
-      }
+    if (showSolutionButton) {
+      showSolutionButton.disabled = true;
     }
   }
+}
 
-  init();
-})();
+init();

@@ -1,15 +1,5 @@
 "use strict";
 
-/*
- * CW TRAINER
- * Audio: incwaudio.js
- *
- * API:
- *   INCWAudio.start()
- *   INCWAudio.tone()
- *   INCWAudio.stop()
- */
-
 /* ============================================================
    DOM
    ============================================================ */
