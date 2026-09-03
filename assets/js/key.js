@@ -1,139 +1,92 @@
 "use strict";
 
 (() => {
-  /* =========================================================
-     CW KEY TEST
-
-     Quellen:
-       1. Tastatur
-          F = DIT
-          J = DAH
-
-       2. Mikrofon / 3.5 mm Eingang
-          Pegel
-          Threshold
-          Hysteresis
-          Debounce
-
-     Keyer:
-       Straight Key
-       Iambic Mode A
-       Iambic Mode B
-     ========================================================= */
-
-  /* =========================================================
-     DOM
-     ========================================================= */
-
   const modeSelect = document.getElementById("mode");
+  const modeDescription = document.getElementById("mode-description");
+  const inputSourceSelect = document.getElementById("input-source");
+  const audioDeviceSelect = document.getElementById("audio-device");
+  const paddleReverseInput = document.getElementById("paddle-reverse");
 
   const wpmInput = document.getElementById("wpm");
-
   const toneInput = document.getElementById("tone");
-
   const volumeInput = document.getElementById("volume");
-
   const debounceInput = document.getElementById("debounce");
-
   const thresholdInput = document.getElementById("threshold");
-
   const hysteresisInput = document.getElementById("hysteresis");
 
   const audioStartButton = document.getElementById("audio-start");
-
   const audioStopButton = document.getElementById("audio-stop");
 
   const ditIndicator = document.getElementById("dit-indicator");
-
   const dahIndicator = document.getElementById("dah-indicator");
 
   const status = document.getElementById("status");
-
   const keyOutput = document.getElementById("key-output");
-
   const eventLog = document.getElementById("event-log");
 
   const microphoneStatus = document.getElementById("microphone-status");
 
   const meterLevel = document.getElementById("meter-level");
-
   const meterThreshold = document.getElementById("meter-threshold");
-
   const meterOffThreshold = document.getElementById("meter-off-threshold");
 
   const levelValue = document.getElementById("level-value");
-
   const thresholdValue = document.getElementById("threshold-value");
-
   const offThresholdValue = document.getElementById("off-threshold-value");
 
   const signalState = document.getElementById("signal-state");
 
-  /* =========================================================
-     AUDIO
-     ========================================================= */
+  const MODE_DESCRIPTIONS = {
+    straight:
+      "Straight Key: The tone remains active as long as the key is pressed or the input is active.",
+
+    iambicA:
+      "Iambic Mode A: DIT and DAH are generated automatically using a dual paddle.",
+
+    iambicB:
+      "Iambic Mode B: Like Mode A, with an additional opposite element when requested.",
+
+    bug: "Vibroplex Bug: DAH is manually keyed. DIT generates an automatic stream of dots.",
+
+    sideswiper:
+      "Sideswiper / Cootie: A single lever alternates between DIT and DAH.",
+  };
 
   let audioContext = null;
   let oscillator = null;
   let gainNode = null;
-
-  /* =========================================================
-     MICROPHONE
-     ========================================================= */
 
   let microphoneStream = null;
   let microphoneSource = null;
   let analyser = null;
   let meterFrame = null;
 
-  /* =========================================================
-     KEYBOARD STATE
-     ========================================================= */
+  let keyboardDitPressed = false;
+  let keyboardDahPressed = false;
+  let microphoneKeyPressed = false;
 
   let ditPressed = false;
   let dahPressed = false;
 
-  /* =========================================================
-     KEYER STATE
-     ========================================================= */
-
   let keyerRunning = false;
-
   let keyerTimer = null;
-
-  let currentElement = null;
-
-  /*
-   * true = nächstes Element soll DIT sein
-   * false = nächstes Element soll DAH sein
-   */
-  let nextElement = "dit";
-
-  /*
-   * Bei Iambic B wird gespeichert,
-   * ob während des aktuellen Elements
-   * das Gegenelement gedrückt war.
-   */
-  let oppositeWasPressed = false;
-
-  /*
-   * Verhindert mehrfaches Starten.
-   */
   let keyerGeneration = 0;
 
-  /* =========================================================
-     MICROPHONE SIGNAL
-     ========================================================= */
+  let currentElement = null;
+  let nextElement = "dit";
+  let oppositeWasPressed = false;
+
+  let bugRunning = false;
+  let bugTimer = null;
+  let bugGeneration = 0;
+
+  let sideswiperRunning = false;
+  let sideswiperTimer = null;
+  let sideswiperLastElement = "dah";
 
   let signalOn = false;
-
   let pendingSignalState = null;
-
   let pendingSignalSince = 0;
-
-  /* =========================================================
-     LOG
-     ========================================================= */
 
   function log(message) {
     if (!eventLog) {
@@ -143,13 +96,8 @@
     const time = new Date().toLocaleTimeString();
 
     eventLog.textContent += `[${time}] ${message}\n`;
-
     eventLog.scrollTop = eventLog.scrollHeight;
   }
-
-  /* =========================================================
-     SETTINGS
-     ========================================================= */
 
   function numberValue(element, fallback) {
     const value = Number(element?.value);
@@ -185,42 +133,37 @@
     return Math.max(0, getThreshold() - getHysteresis());
   }
 
-  /*
-   * Morse Standard:
-   *
-   * DIT = 1 Einheit
-   * DAH = 3 Einheiten
-   */
   function getDitTime() {
     return 1200 / getWpm();
   }
-
-  /* =========================================================
-     AUDIO
-     ========================================================= */
 
   function createAudio() {
     if (audioContext) {
       return;
     }
 
-    audioContext = new AudioContext();
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+
+    if (!AudioContextClass) {
+      throw new Error("Web Audio API is not supported.");
+    }
+
+    audioContext = new AudioContextClass();
 
     oscillator = audioContext.createOscillator();
-
     gainNode = audioContext.createGain();
 
     oscillator.type = "sine";
-
     oscillator.frequency.value = getTone();
 
     gainNode.gain.value = 0;
 
     oscillator.connect(gainNode);
-
     gainNode.connect(audioContext.destination);
 
     oscillator.start();
+
+    log(`Audio context created: ${audioContext.state}`);
   }
 
   async function enableAudio() {
@@ -231,70 +174,125 @@
         await audioContext.resume();
       }
 
-      await enableMicrophone();
+      if (audioContext.state !== "running") {
+        throw new Error(
+          `Audio context could not be started: ${audioContext.state}`,
+        );
+      }
 
-      audioStartButton.disabled = true;
+      if (audioStartButton) {
+        audioStartButton.disabled = true;
+      }
 
-      audioStopButton.disabled = false;
+      if (audioStopButton) {
+        audioStopButton.disabled = false;
+      }
 
-      status.textContent = "Audio and microphone active";
+      if (status) {
+        status.textContent = "Audio active";
+      }
 
-      log("Audio enabled.");
+      log(`Audio active: ${getTone()} Hz`);
+
+      try {
+        await enableMicrophone();
+
+        if (status) {
+          status.textContent = "Audio and microphone active";
+        }
+      } catch (error) {
+        console.warn("Microphone:", error);
+
+        if (microphoneStatus) {
+          microphoneStatus.textContent = `${error.name}: ${error.message}`;
+        }
+
+        log(`MIC ERROR ${error.name}: ${error.message}`);
+      }
     } catch (error) {
-      console.error(error);
+      console.error("Audio:", error);
 
-      status.textContent = "Audio / microphone unavailable";
+      if (status) {
+        status.textContent = "Audio unavailable";
+      }
 
-      microphoneStatus.textContent = `${error.name}: ${error.message}`;
-
-      log(`ERROR ${error.name}: ${error.message}`);
+      log(`AUDIO ERROR ${error.name}: ${error.message}`);
     }
   }
 
   function stopAudio() {
-    stopKeyer();
-
+    stopAllKeyers();
     stopTone();
-
     stopMicrophone();
 
     if (meterFrame !== null) {
       cancelAnimationFrame(meterFrame);
-
       meterFrame = null;
     }
 
     if (audioContext) {
-      audioContext.close();
+      try {
+        audioContext.close();
+      } catch (error) {
+        console.warn(error);
+      }
     }
 
     audioContext = null;
     oscillator = null;
     gainNode = null;
 
-    audioStartButton.disabled = false;
+    signalOn = false;
+    microphoneKeyPressed = false;
+    pendingSignalState = null;
 
-    audioStopButton.disabled = true;
+    ditPressed = false;
+    dahPressed = false;
 
-    status.textContent = "Press Enable Audio";
+    updateIndicators();
 
-    microphoneStatus.textContent = "Not connected";
+    if (signalState) {
+      signalState.textContent = "SIGNAL OFF";
+      signalState.classList.remove("active");
+    }
 
-    applySignalState(false, false);
+    if (audioStartButton) {
+      audioStartButton.disabled = false;
+    }
 
-    keyOutput.textContent = "Ready";
+    if (audioStopButton) {
+      audioStopButton.disabled = true;
+    }
+
+    if (status) {
+      status.textContent = "Press Enable Audio";
+    }
+
+    if (microphoneStatus) {
+      microphoneStatus.textContent = "Not connected";
+    }
+
+    if (keyOutput) {
+      keyOutput.textContent = "Ready";
+    }
 
     log("Audio stopped.");
   }
 
   function startTone() {
-    if (!audioContext || !gainNode) {
+    if (!audioContext || !oscillator || !gainNode) {
       return;
+    }
+
+    if (audioContext.state === "suspended") {
+      audioContext.resume();
     }
 
     oscillator.frequency.setValueAtTime(getTone(), audioContext.currentTime);
 
-    gainNode.gain.setTargetAtTime(getVolume(), audioContext.currentTime, 0.003);
+    gainNode.gain.cancelScheduledValues(audioContext.currentTime);
+
+    gainNode.gain.setValueAtTime(getVolume(), audioContext.currentTime);
   }
 
   function stopTone() {
@@ -302,39 +300,48 @@
       return;
     }
 
-    gainNode.gain.setTargetAtTime(0, audioContext.currentTime, 0.003);
-  }
+    gainNode.gain.cancelScheduledValues(audioContext.currentTime);
 
-  /* =========================================================
-     MICROPHONE
-     ========================================================= */
+    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+  }
 
   async function enableMicrophone() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       throw new Error("Microphone access is not supported.");
     }
 
-    microphoneStream = await navigator.mediaDevices.getUserMedia({
+    const constraints = {
       audio: {
         echoCancellation: false,
         noiseSuppression: false,
         autoGainControl: false,
       },
-    });
+    };
+
+    if (audioDeviceSelect?.value) {
+      constraints.audio.deviceId = {
+        exact: audioDeviceSelect.value,
+      };
+    }
+
+    microphoneStream = await navigator.mediaDevices.getUserMedia(constraints);
 
     analyser = audioContext.createAnalyser();
 
     analyser.fftSize = 1024;
-
     analyser.smoothingTimeConstant = 0.05;
 
     microphoneSource = audioContext.createMediaStreamSource(microphoneStream);
 
     microphoneSource.connect(analyser);
 
-    microphoneStatus.textContent = "Connected";
+    if (microphoneStatus) {
+      microphoneStatus.textContent = "Connected";
+    }
 
-    log("Microphone input connected.");
+    log("Microphone connected.");
+
+    await enumerateAudioDevices();
 
     startMeter();
   }
@@ -349,13 +356,12 @@
     microphoneStream = null;
     microphoneSource = null;
     analyser = null;
+    microphoneKeyPressed = false;
 
-    microphoneStatus.textContent = "Not connected";
+    if (microphoneStatus) {
+      microphoneStatus.textContent = "Not connected";
+    }
   }
-
-  /* =========================================================
-     MICROPHONE LEVEL
-     ========================================================= */
 
   function getMicrophoneLevel() {
     if (!analyser) {
@@ -379,131 +385,90 @@
     }
 
     const db = 20 * Math.log10(rms);
-
     const level = ((db + 60) / 60) * 100;
 
     return Math.max(0, Math.min(100, level));
   }
 
-  /* =========================================================
-     METER
-     ========================================================= */
-
   function updateMeter(level) {
     const threshold = getThreshold();
-
     const offThreshold = getOffThreshold();
 
-    meterLevel.style.width = `${level}%`;
+    if (meterLevel) {
+      meterLevel.style.width = `${level}%`;
+    }
 
-    meterThreshold.style.left = `${threshold}%`;
+    if (meterThreshold) {
+      meterThreshold.style.left = `${threshold}%`;
+    }
 
-    meterOffThreshold.style.left = `${offThreshold}%`;
+    if (meterOffThreshold) {
+      meterOffThreshold.style.left = `${offThreshold}%`;
+    }
 
-    levelValue.textContent = level.toFixed(1);
+    if (levelValue) {
+      levelValue.textContent = level.toFixed(1);
+    }
 
-    thresholdValue.textContent = threshold.toFixed(1);
+    if (thresholdValue) {
+      thresholdValue.textContent = threshold.toFixed(1);
+    }
 
-    offThresholdValue.textContent = offThreshold.toFixed(1);
+    if (offThresholdValue) {
+      offThresholdValue.textContent = offThreshold.toFixed(1);
+    }
   }
-
-  /* =========================================================
-     MICROPHONE DEBOUNCE + HYSTERESIS
-     ========================================================= */
 
   function processMicrophoneSignal(level) {
     let requestedState = signalOn;
 
     const threshold = getThreshold();
-
     const offThreshold = getOffThreshold();
 
-    /*
-     * OFF -> ON
-     */
     if (!signalOn) {
       if (level >= threshold) {
         requestedState = true;
       }
-    } else {
-
-    /*
-     * ON -> OFF
-     */
-      if (level <= offThreshold) {
-        requestedState = false;
-      }
+    } else if (level <= offThreshold) {
+      requestedState = false;
     }
 
-    /*
-     * Kein Zustandswechsel.
-     */
     if (requestedState === signalOn) {
       pendingSignalState = null;
-
       return;
     }
 
     const now = performance.now();
 
-    /*
-     * Neuer Kandidat.
-     */
     if (pendingSignalState !== requestedState) {
       pendingSignalState = requestedState;
-
       pendingSignalSince = now;
-
       return;
     }
 
-    /*
-     * Debounce-Zeit erreicht.
-     */
     if (now - pendingSignalSince >= getDebounce()) {
-      applySignalState(requestedState, true);
-
+      applySignalState(requestedState);
       pendingSignalState = null;
     }
   }
 
-  /* =========================================================
-     MICROPHONE KEY STATE
-     ========================================================= */
-
-  function applySignalState(on, fromMicrophone) {
+  function applySignalState(on) {
     if (signalOn === on) {
       return;
     }
 
     signalOn = on;
+    microphoneKeyPressed = on;
 
-    if (on) {
-      startTone();
-
-      signalState.textContent = "SIGNAL ON";
-
-      signalState.classList.add("active");
-
-      if (fromMicrophone) {
-        log("MIC KEY DOWN");
-      }
-    } else {
-      stopTone();
-
-      signalState.textContent = "SIGNAL OFF";
-
-      signalState.classList.remove("active");
-
-      if (fromMicrophone) {
-        log("MIC KEY UP");
-      }
+    if (signalState) {
+      signalState.textContent = on ? "SIGNAL ON" : "SIGNAL OFF";
+      signalState.classList.toggle("active", on);
     }
-  }
 
-  /* =========================================================
-     METER LOOP
-     ========================================================= */
+    log(on ? "MIC KEY DOWN" : "MIC KEY UP");
+
+    updateInternalPaddleState();
+  }
 
   function startMeter() {
     if (meterFrame !== null) {
@@ -514,7 +479,6 @@
       const level = getMicrophoneLevel();
 
       updateMeter(level);
-
       processMicrophoneSignal(level);
 
       meterFrame = requestAnimationFrame(loop);
@@ -523,21 +487,64 @@
     loop();
   }
 
-  /* =========================================================
-     KEYBOARD INDICATORS
-     ========================================================= */
-
-  function updateDitIndicator() {
-    ditIndicator.classList.toggle("active", ditPressed);
+  function isPaddleReverse() {
+    return paddleReverseInput?.checked === true;
   }
 
-  function updateDahIndicator() {
-    dahIndicator.classList.toggle("active", dahPressed);
+  function mapPaddleState(rawDit, rawDah) {
+    if (isPaddleReverse()) {
+      return {
+        dit: rawDah,
+        dah: rawDit,
+      };
+    }
+
+    return {
+      dit: rawDit,
+      dah: rawDah,
+    };
   }
 
-  /* =========================================================
-     KEYBOARD EVENTS
-     ========================================================= */
+  function getInputSource() {
+    return inputSourceSelect?.value || "both";
+  }
+
+  function updateInternalPaddleState() {
+    const source = getInputSource();
+
+    let rawDit = false;
+    let rawDah = false;
+
+    if (source === "keyboard" || source === "both") {
+      rawDit = keyboardDitPressed;
+      rawDah = keyboardDahPressed;
+    }
+
+    const mapped = mapPaddleState(rawDit, rawDah);
+
+    let externalDit = false;
+    let externalDah = false;
+
+    if (source === "audio" || source === "both") {
+      externalDit = microphoneKeyPressed;
+    }
+
+    ditPressed = mapped.dit || externalDit;
+    dahPressed = mapped.dah || externalDah;
+
+    updateIndicators();
+    processKeyerInput();
+  }
+
+  function updateIndicators() {
+    if (ditIndicator) {
+      ditIndicator.classList.toggle("active", ditPressed);
+    }
+
+    if (dahIndicator) {
+      dahIndicator.classList.toggle("active", dahPressed);
+    }
+  }
 
   window.addEventListener("keydown", (event) => {
     const key = event.key.toLowerCase();
@@ -553,22 +560,16 @@
     }
 
     if (key === "f") {
-      ditPressed = true;
-
-      updateDitIndicator();
-
-      log("DIT paddle DOWN");
+      keyboardDitPressed = true;
+      log("KEYBOARD DIT DOWN");
     }
 
     if (key === "j") {
-      dahPressed = true;
-
-      updateDahIndicator();
-
-      log("DAH paddle DOWN");
+      keyboardDahPressed = true;
+      log("KEYBOARD DAH DOWN");
     }
 
-    handleKeyboardState();
+    updateInternalPaddleState();
   });
 
   window.addEventListener("keyup", (event) => {
@@ -581,88 +582,72 @@
     event.preventDefault();
 
     if (key === "f") {
-      ditPressed = false;
-
-      updateDitIndicator();
-
-      log("DIT paddle UP");
+      keyboardDitPressed = false;
+      log("KEYBOARD DIT UP");
     }
 
     if (key === "j") {
-      dahPressed = false;
-
-      updateDahIndicator();
-
-      log("DAH paddle UP");
+      keyboardDahPressed = false;
+      log("KEYBOARD DAH UP");
     }
 
-    handleKeyboardState();
+    updateInternalPaddleState();
   });
 
-  /* =========================================================
-     KEYBOARD STATE
-     ========================================================= */
+  function processKeyerInput() {
+    const mode = modeSelect?.value || "straight";
 
-  function handleKeyboardState() {
-    const mode = modeSelect.value;
+    switch (mode) {
+      case "straight":
+        handleStraightKey();
+        break;
 
-    if (mode === "straight") {
-      handleStraightKey();
+      case "iambicA":
+      case "iambicB":
+        handleIambicKeyer();
+        break;
 
-      return;
+      case "bug":
+        handleBug();
+        break;
+
+      case "sideswiper":
+        handleSideswiper();
+        break;
+
+      default:
+        stopAllKeyers();
     }
-
-    handleIambicKeyer();
   }
 
-  /* =========================================================
-     STRAIGHT KEY
-     ========================================================= */
-
   function handleStraightKey() {
-    if (ditPressed || dahPressed) {
+    const pressed = ditPressed || dahPressed;
+
+    if (pressed) {
       startTone();
 
-      keyOutput.textContent = "KEY DOWN";
+      if (keyOutput) {
+        keyOutput.textContent = "KEY DOWN";
+      }
     } else {
       stopTone();
 
-      keyOutput.textContent = "KEY UP";
+      if (keyOutput) {
+        keyOutput.textContent = "KEY UP";
+      }
     }
   }
-
-  /* =========================================================
-     IAMBIC INPUT
-     ========================================================= */
 
   function handleIambicKeyer() {
     if (!keyerRunning && (ditPressed || dahPressed)) {
       startKeyer();
-
       return;
     }
 
-    /*
-     * Wenn beide Paddle während
-     * eines laufenden Elements
-     * gedrückt werden, merken wir
-     * uns das Gegenelement.
-     */
-
     if (keyerRunning && ditPressed && dahPressed) {
-      if (currentElement === "dit") {
-        oppositeWasPressed = true;
-      }
-
-      if (currentElement === "dah") {
-        oppositeWasPressed = true;
-      }
+      oppositeWasPressed = true;
     }
   }
-
-  /* =========================================================
-     START IAMBIC KEYER
-     ========================================================= */
 
   function startKeyer() {
     if (keyerRunning) {
@@ -670,68 +655,36 @@
     }
 
     keyerRunning = true;
-
     keyerGeneration++;
-
     oppositeWasPressed = false;
-
-    /*
-     * Wenn nur ein Paddle
-     * gedrückt wurde, wird damit
-     * gestartet.
-     */
 
     if (ditPressed && !dahPressed) {
       nextElement = "dit";
     } else if (dahPressed && !ditPressed) {
       nextElement = "dah";
     } else {
-
-    /*
-     * Bei beiden Paddle beginnt
-     * die normale Alternation mit DIT.
-     */
       nextElement = "dit";
     }
 
     runKeyerElement(keyerGeneration);
   }
 
-  /* =========================================================
-     STOP IAMBIC KEYER
-     ========================================================= */
-
   function stopKeyer() {
     keyerRunning = false;
-
     keyerGeneration++;
 
     if (keyerTimer !== null) {
       clearTimeout(keyerTimer);
-
       keyerTimer = null;
     }
 
     currentElement = null;
-
     oppositeWasPressed = false;
 
     stopTone();
-
-    keyOutput.textContent = "KEY UP";
   }
 
-  /* =========================================================
-     SELECT NEXT ELEMENT
-     ========================================================= */
-
   function selectNextElement() {
-    /*
-     * Beide Paddle:
-     *
-     * Immer alternieren.
-     */
-
     if (ditPressed && dahPressed) {
       const result = nextElement;
 
@@ -740,36 +693,18 @@
       return result;
     }
 
-    /*
-     * Nur DIT.
-     */
-
     if (ditPressed) {
       nextElement = "dah";
-
       return "dit";
     }
 
-    /*
-     * Nur DAH.
-     */
-
     if (dahPressed) {
       nextElement = "dit";
-
       return "dah";
     }
 
-    /*
-     * Nichts gedrückt.
-     */
-
     return null;
   }
-
-  /* =========================================================
-     RUN ELEMENT
-     ========================================================= */
 
   function runKeyerElement(generation) {
     if (!keyerRunning || generation !== keyerGeneration) {
@@ -778,48 +713,29 @@
 
     const element = selectNextElement();
 
-    /*
-     * Nichts gedrückt.
-     */
-
     if (!element) {
       stopKeyer();
-
       return;
     }
 
     currentElement = element;
-
     oppositeWasPressed = false;
 
-    /*
-     * Prüfen, ob während dieses
-     * Elements beide Paddle aktiv
-     * sind.
-     */
-
-    if (ditPressed && dahPressed) {
-      oppositeWasPressed = true;
-    }
-
     const ditTime = getDitTime();
-
-    const elementTime = element === "dit" ? ditTime : ditTime * 3;
+    const duration = element === "dit" ? ditTime : ditTime * 3;
 
     startTone();
 
-    keyOutput.textContent = element === "dit" ? "DIT" : "DAH";
+    if (keyOutput) {
+      keyOutput.textContent = element === "dit" ? "DIT" : "DAH";
+    }
 
     log(`TX ${element.toUpperCase()}`);
 
     keyerTimer = setTimeout(() => {
       finishKeyerElement(generation, element);
-    }, elementTime);
+    }, duration);
   }
-
-  /* =========================================================
-     FINISH ELEMENT
-     ========================================================= */
 
   function finishKeyerElement(generation, element) {
     if (generation !== keyerGeneration) {
@@ -827,127 +743,228 @@
     }
 
     stopTone();
-
     keyerTimer = null;
 
-    const mode = modeSelect.value;
-
-    /*
-     * -------------------------------------------------------
-     * IAMBIC A
-     * -------------------------------------------------------
-     *
-     * Wenn beide Paddle während
-     * des Elements aktiv waren,
-     * wurde das aktuelle Element
-     * fertig gesendet.
-     *
-     * Danach wird nur weitergemacht,
-     * wenn noch ein Paddle aktiv ist.
-     *
-     * Wird alles losgelassen,
-     * endet der Keyer hier.
-     */
+    const mode = modeSelect?.value;
 
     if (mode === "iambicA") {
       if (ditPressed || dahPressed) {
         runKeyerElement(generation);
-
-        return;
+      } else {
+        stopKeyer();
       }
-
-      stopKeyer();
 
       return;
     }
 
-    /*
-     * -------------------------------------------------------
-     * IAMBIC B
-     * -------------------------------------------------------
-     *
-     * Wenn während des Elements
-     * das andere Paddle gedrückt war,
-     * wird nach dem aktuellen Element
-     * noch genau dieses Gegenelement
-     * gesendet.
-     */
-
     if (mode === "iambicB") {
-      /*
-       * Gegenelement vorhanden?
-       */
-
       if (oppositeWasPressed) {
-        /*
-         * Das Paddle darf inzwischen
-         * bereits losgelassen worden sein.
-         *
-         * Genau hier liegt der
-         * wesentliche Unterschied
-         * zu Mode A.
-         */
-
-        if (element === "dit") {
-          nextElement = "dah";
-        } else {
-          nextElement = "dit";
-        }
-
-        /*
-         * Das nächste Element wird
-         * auch dann erzeugt, wenn
-         * inzwischen beide Paddle
-         * losgelassen wurden.
-         */
-
+        nextElement = element === "dit" ? "dah" : "dit";
         oppositeWasPressed = false;
-
         runKeyerElement(generation);
-
         return;
       }
-
-      /*
-       * Kein gespeichertes
-       * Gegenelement.
-       */
 
       if (ditPressed || dahPressed) {
         runKeyerElement(generation);
-
-        return;
+      } else {
+        stopKeyer();
       }
-
-      stopKeyer();
 
       return;
     }
-
-    /*
-     * Sicherheit.
-     */
 
     stopKeyer();
   }
 
-  /* =========================================================
-     MODE CHANGE
-     ========================================================= */
+  function handleBug() {
+    if (dahPressed) {
+      stopBug();
+      startTone();
 
-  modeSelect?.addEventListener("change", () => {
-    stopKeyer();
+      if (keyOutput) {
+        keyOutput.textContent = "DAH";
+      }
+
+      return;
+    }
+
+    if (ditPressed) {
+      if (!bugRunning) {
+        startBug();
+      }
+
+      return;
+    }
+
+    if (!bugRunning) {
+      stopTone();
+
+      if (keyOutput) {
+        keyOutput.textContent = "KEY UP";
+      }
+    }
+  }
+
+  function startBug() {
+    if (bugRunning) {
+      return;
+    }
+
+    bugRunning = true;
+    bugGeneration++;
+
+    runBugDit(bugGeneration);
+  }
+
+  function stopBug() {
+    bugRunning = false;
+    bugGeneration++;
+
+    if (bugTimer !== null) {
+      clearTimeout(bugTimer);
+      bugTimer = null;
+    }
 
     stopTone();
+  }
 
-    keyOutput.textContent = "Ready";
+  function runBugDit(generation) {
+    if (!bugRunning || generation !== bugGeneration) {
+      return;
+    }
+
+    if (!ditPressed) {
+      stopBug();
+
+      if (keyOutput) {
+        keyOutput.textContent = "KEY UP";
+      }
+
+      return;
+    }
+
+    const ditTime = getDitTime();
+
+    startTone();
+
+    if (keyOutput) {
+      keyOutput.textContent = "DIT";
+    }
+
+    log("BUG DIT");
+
+    bugTimer = setTimeout(() => {
+      if (generation !== bugGeneration) {
+        return;
+      }
+
+      stopTone();
+
+      bugTimer = setTimeout(() => {
+        runBugDit(generation);
+      }, ditTime);
+    }, ditTime);
+  }
+
+  function handleSideswiper() {
+    const pressed = ditPressed || dahPressed;
+
+    if (!pressed) {
+      sideswiperRunning = false;
+
+      if (sideswiperTimer !== null) {
+        clearTimeout(sideswiperTimer);
+        sideswiperTimer = null;
+      }
+
+      stopTone();
+
+      if (keyOutput) {
+        keyOutput.textContent = "KEY UP";
+      }
+
+      return;
+    }
+
+    if (sideswiperRunning) {
+      return;
+    }
+
+    sideswiperRunning = true;
+
+    const element = sideswiperLastElement === "dit" ? "dah" : "dit";
+
+    sideswiperLastElement = element;
+
+    const ditTime = getDitTime();
+    const duration = element === "dit" ? ditTime : ditTime * 3;
+
+    startTone();
+
+    if (keyOutput) {
+      keyOutput.textContent = element === "dit" ? "DIT" : "DAH";
+    }
+
+    log(`COOTIE ${element.toUpperCase()}`);
+
+    sideswiperTimer = setTimeout(() => {
+      stopTone();
+
+      sideswiperRunning = false;
+      sideswiperTimer = null;
+
+      if (keyOutput && !ditPressed && !dahPressed) {
+        keyOutput.textContent = "KEY UP";
+      }
+    }, duration);
+  }
+
+  function stopAllKeyers() {
+    stopKeyer();
+    stopBug();
+
+    sideswiperRunning = false;
+
+    if (sideswiperTimer !== null) {
+      clearTimeout(sideswiperTimer);
+      sideswiperTimer = null;
+    }
+
+    stopTone();
+  }
+
+  modeSelect?.addEventListener("change", () => {
+    stopAllKeyers();
+
+    if (modeDescription) {
+      modeDescription.textContent = MODE_DESCRIPTIONS[modeSelect.value] || "";
+    }
+
+    if (keyOutput) {
+      keyOutput.textContent = "Ready";
+    }
 
     log(`MODE ${modeSelect.value}`);
+
+    updateInternalPaddleState();
   });
 
-  /* =========================================================
-     AUDIO SETTINGS
-     ========================================================= */
+  paddleReverseInput?.addEventListener("change", () => {
+    stopAllKeyers();
+
+    log(isPaddleReverse() ? "PADDLE REVERSE ON" : "PADDLE REVERSE OFF");
+
+    updateInternalPaddleState();
+  });
+
+  inputSourceSelect?.addEventListener("change", () => {
+    stopAllKeyers();
+
+    log(`INPUT SOURCE ${getInputSource()}`);
+
+    updateInternalPaddleState();
+  });
 
   toneInput?.addEventListener("input", () => {
     if (oscillator && audioContext) {
@@ -956,10 +973,12 @@
   });
 
   volumeInput?.addEventListener("input", () => {
-    if (audioContext && gainNode) {
-      if (signalOn) {
-        startTone();
-      }
+    if (
+      audioContext &&
+      gainNode &&
+      (signalOn || keyerRunning || bugRunning || sideswiperRunning)
+    ) {
+      startTone();
     }
   });
 
@@ -979,29 +998,103 @@
     log(`WPM ${getWpm()}`);
   });
 
-  /* =========================================================
-     BUTTONS
-     ========================================================= */
+  async function enumerateAudioDevices() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+      return;
+    }
+
+    if (!audioDeviceSelect) {
+      return;
+    }
+
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+
+      const inputs = devices.filter((device) => device.kind === "audioinput");
+
+      const previous = audioDeviceSelect.value;
+
+      audioDeviceSelect.innerHTML = "";
+
+      const defaultOption = document.createElement("option");
+
+      defaultOption.value = "";
+      defaultOption.textContent = "Default Microphone";
+
+      audioDeviceSelect.appendChild(defaultOption);
+
+      inputs.forEach((device, index) => {
+        const option = document.createElement("option");
+
+        option.value = device.deviceId;
+        option.textContent = device.label || `Audio Input ${index + 1}`;
+
+        audioDeviceSelect.appendChild(option);
+      });
+
+      if (
+        previous &&
+        [...audioDeviceSelect.options].some(
+          (option) => option.value === previous,
+        )
+      ) {
+        audioDeviceSelect.value = previous;
+      }
+    } catch (error) {
+      console.error("enumerateAudioDevices:", error);
+    }
+  }
+
+  audioDeviceSelect?.addEventListener("change", async () => {
+    log("AUDIO DEVICE CHANGED");
+
+    if (!audioContext) {
+      return;
+    }
+
+    stopMicrophone();
+
+    try {
+      await enableMicrophone();
+    } catch (error) {
+      console.error(error);
+
+      if (microphoneStatus) {
+        microphoneStatus.textContent = `${error.name}: ${error.message}`;
+      }
+
+      log(`MIC ERROR ${error.name}: ${error.message}`);
+    }
+  });
 
   audioStartButton?.addEventListener("click", enableAudio);
 
   audioStopButton?.addEventListener("click", stopAudio);
 
-  /* =========================================================
-     INITIALIZATION
-     ========================================================= */
-
   updateMeter(0);
 
-  signalState.textContent = "SIGNAL OFF";
+  if (modeDescription) {
+    modeDescription.textContent =
+      MODE_DESCRIPTIONS[modeSelect?.value || "straight"] || "";
+  }
 
-  keyOutput.textContent = "Ready";
+  if (signalState) {
+    signalState.textContent = "SIGNAL OFF";
+  }
+
+  if (keyOutput) {
+    keyOutput.textContent = "Ready";
+  }
+
+  if (audioStopButton) {
+    audioStopButton.disabled = true;
+  }
 
   log("CW Key Test ready.");
-
   log("F = DIT, J = DAH.");
+  log("Paddle Reverse available.");
+  log("Modes: Straight, Iambic A, Iambic B, Bug, Sideswiper.");
+  log("Audio input ready.");
 
-  log("Microphone input is monitored separately.");
-
-  log("Straight Key, Iambic A and Iambic B available.");
+  enumerateAudioDevices();
 })();

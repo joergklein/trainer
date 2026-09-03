@@ -4,119 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <title>CW Key Test</title>
+    <title>CW Key Test V2</title>
 
     <link rel="stylesheet" href="assets/css/styles.css" />
-
-    <style>
-      .test-section {
-        margin-top: 24px;
-      }
-
-      .test-section h2 {
-        margin-bottom: 16px;
-      }
-
-      .key-display {
-        display: flex;
-        gap: 12px;
-      }
-
-      .key-indicator {
-        flex: 1;
-        padding: 12px;
-        border: 1px solid #bbb;
-        text-align: center;
-        background: #f5f5f5;
-      }
-
-      .key-indicator.active {
-        background: #ccc;
-      }
-
-      .meter {
-        position: relative;
-        width: 100%;
-        height: 32px;
-        margin-top: 10px;
-        background: #e5e5e5;
-        border: 1px solid #aaa;
-        overflow: hidden;
-      }
-
-      .meter-level {
-        position: absolute;
-        inset: 0 auto 0 0;
-        width: 0%;
-        background: #555;
-      }
-
-      .meter-threshold,
-      .meter-off-threshold {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        width: 2px;
-        z-index: 2;
-      }
-
-      .meter-threshold {
-        background: #d00000;
-      }
-
-      .meter-off-threshold {
-        background: #666;
-      }
-
-      .meter-values {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 10px;
-        margin-top: 10px;
-      }
-
-      .meter-value {
-        padding: 10px;
-        border: 1px solid #ccc;
-        background: #fafafa;
-      }
-
-      .meter-value strong {
-        display: block;
-        margin-bottom: 4px;
-      }
-
-      .signal-state {
-        margin-top: 12px;
-        padding: 12px;
-        text-align: center;
-        font-weight: bold;
-        border: 1px solid #aaa;
-        background: #f5f5f5;
-      }
-
-      .signal-state.active {
-        background: #ccc;
-      }
-
-      .source-state {
-        margin-top: 12px;
-        padding: 10px;
-        border: 1px solid #ccc;
-        background: #fafafa;
-      }
-
-      .source-state strong {
-        display: block;
-        margin-bottom: 5px;
-      }
-
-      .event-log {
-        min-height: 240px;
-        max-height: 400px;
-        overflow: auto;
-      }
-    </style>
   </head>
 
   <body>
@@ -126,162 +16,170 @@
       </header>
 
       <section class="training">
-        <!-- ==================================================
-             KEYER MODE
-             ================================================== -->
-
         <section class="test-section">
           <h2>Keyer</h2>
+
+          <button type="button" onclick="window.location.href = 'cwtype.html'">
+            CW Type
+          </button>
 
           <div class="control-group">
             <label for="mode">Keying Mode</label>
 
             <select id="mode">
               <option value="straight">Straight Key</option>
-
               <option value="iambicA">Iambic Mode A</option>
-
               <option value="iambicB">Iambic Mode B</option>
+              <option value="bug">Vibroplex Bug</option>
+              <option value="sideswiper">Sideswiper / Cootie</option>
             </select>
           </div>
 
-          <!-- ==================================================
-               KEYBOARD PADDLES
-               ================================================== -->
+          <div id="mode-description" class="mode-description">
+            Straight Key: The transmitter remains active as long as the key or
+            input contact is closed.
+          </div>
 
           <div class="control-group">
-            <label> Keyboard Test </label>
+            <label for="input-source">Input Source</label>
+
+            <select id="input-source">
+              <option value="both">Keyboard + Audio Input</option>
+              <option value="keyboard">Keyboard only</option>
+              <option value="audio">Audio Input only</option>
+            </select>
+          </div>
+
+          <section class="test-section">
+            <h2>Audio</h2>
+
+            <div class="buttons">
+              <button id="audio-start" type="button">▶ Enable Audio</button>
+
+              <button id="audio-stop" type="button" disabled>
+                ■ Stop Audio
+              </button>
+            </div>
+          </section>
+
+          <section class="test-section">
+            <h2>Paddle</h2>
+
+            <div class="option-box">
+              <label class="checkbox-label">
+                <input id="paddle-reverse" type="checkbox" />
+                Paddle Reverse
+              </label>
+
+              <div class="info-box">
+                Normal:
+                <strong>F / DIT = DIT</strong>, <strong>J / DAH = DAH</strong>.
+                <br />
+                When Paddle Reverse is enabled, DIT and DAH are swapped.
+              </div>
+            </div>
+          </section>
+
+          <div class="control-group">
+            <label>Keyboard / Paddle Test</label>
 
             <div class="key-display">
               <div id="dit-indicator" class="key-indicator">F — DIT</div>
-
               <div id="dah-indicator" class="key-indicator">J — DAH</div>
             </div>
           </div>
 
-          <!-- ==================================================
-               KEYER SETTINGS
-               ================================================== -->
-
           <div class="settings">
             <div class="control-group">
-              <label for="wpm"> Speed (WPM) </label>
-
+              <label for="wpm">Speed (WPM)</label>
               <input id="wpm" type="number" min="1" max="60" value="12" />
             </div>
 
             <div class="control-group">
-              <label for="tone"> Tone (Hz) </label>
-
+              <label for="tone">Tone (Hz)</label>
               <input id="tone" type="number" min="100" max="2000" value="600" />
             </div>
 
             <div class="control-group">
-              <label for="volume"> Volume </label>
-
+              <label for="volume">Volume</label>
               <input id="volume" type="range" min="0" max="100" value="30" />
             </div>
 
             <div class="control-group">
-              <label for="debounce"> Debounce (ms) </label>
-
+              <label for="debounce">Debounce (ms)</label>
               <input id="debounce" type="number" min="0" max="100" value="10" />
             </div>
           </div>
         </section>
 
-        <!-- ==================================================
-             AUDIO
-             ================================================== -->
-
         <section class="test-section">
-          <h2>Audio</h2>
-
-          <div class="buttons">
-            <button id="audio-start" type="button">▶ Enable Audio</button>
-
-            <button id="audio-stop" type="button" disabled>■ Stop Audio</button>
-          </div>
-
-          <div id="status" class="status-text">Press Enable Audio</div>
-        </section>
-
-        <!-- ==================================================
-             MICROPHONE INPUT
-             ================================================== -->
-
-        <section class="test-section">
-          <h2>3.5 mm / Microphone Input</h2>
+          <h2>Audio Input</h2>
 
           <div class="source-state">
-            <strong> Input </strong>
+            <strong>Input</strong>
+            <span id="microphone-status">Not connected</span>
+          </div>
 
-            <span id="microphone-status"> Not connected </span>
+          <div class="control-group">
+            <label for="audio-device">Audio Device</label>
+            <select id="audio-device">
+              <option value="">Default Microphone</option>
+            </select>
           </div>
 
           <div class="meter">
             <div id="meter-level" class="meter-level"></div>
-
             <div id="meter-threshold" class="meter-threshold"></div>
-
             <div id="meter-off-threshold" class="meter-off-threshold"></div>
           </div>
 
           <div class="meter-values">
             <div class="meter-value">
               <strong>Level</strong>
-              <span id="level-value"> 0 </span>
+              <span id="level-value">0</span>
             </div>
 
             <div class="meter-value">
               <strong>ON Threshold</strong>
-              <span id="threshold-value"> 30 </span>
+              <span id="threshold-value">30</span>
             </div>
 
             <div class="meter-value">
               <strong>OFF Threshold</strong>
-              <span id="off-threshold-value"> 25 </span>
+              <span id="off-threshold-value">25</span>
             </div>
           </div>
 
-          <!-- ==================================================
-               MICROPHONE SETTINGS
-               ================================================== -->
-
           <div class="settings">
             <div class="control-group">
-              <label for="threshold"> Switching Threshold </label>
-
+              <label for="threshold">Switching Threshold</label>
               <input id="threshold" type="range" min="0" max="100" value="30" />
             </div>
 
             <div class="control-group">
-              <label for="hysteresis"> Hysteresis </label>
-
+              <label for="hysteresis">Hysteresis</label>
               <input id="hysteresis" type="range" min="0" max="50" value="5" />
             </div>
           </div>
 
           <div id="signal-state" class="signal-state">SIGNAL OFF</div>
-        </section>
 
-        <!-- ==================================================
-             KEY OUTPUT
-             ================================================== -->
+          <div class="info-box">
+            The audio input is evaluated through the microphone input of the
+            TRRS headset connection.
+            <br /><br />
+            A true dual-paddle input requires DIT and DAH to be transmitted
+            separately to the input hardware.
+          </div>
+        </section>
 
         <section class="test-section">
           <h2>Key Output</h2>
-
           <div id="key-output" class="key-output">Ready</div>
         </section>
 
-        <!-- ==================================================
-             EVENT LOG
-             ================================================== -->
-
         <section class="test-section">
           <h2>Event Log</h2>
-
           <pre id="event-log" class="solution event-log"></pre>
         </section>
       </section>

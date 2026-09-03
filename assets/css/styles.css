@@ -14,10 +14,6 @@
   font-display: swap;
 }
 
-/* ============================================================
-   RESET
-   ============================================================ */
-
 *,
 *::before,
 *::after {
@@ -33,10 +29,6 @@ body {
 [hidden] {
   display: none !important;
 }
-
-/* ============================================================
-   BASE
-   ============================================================ */
 
 body {
   background: #f5f5f5;
@@ -59,10 +51,6 @@ button:disabled {
   cursor: not-allowed;
 }
 
-/* ============================================================
-   CONTAINER
-   ============================================================ */
-
 .container {
   width: min(1000px, 100%);
   margin: 0 auto;
@@ -75,20 +63,12 @@ h1 {
   font-weight: 600;
 }
 
-/* ============================================================
-   TRAINING
-   ============================================================ */
-
 .training {
   padding: 25px;
   background: #fff;
   border: 1px solid #d8d8d8;
   border-radius: 10px;
 }
-
-/* ============================================================
-   CONTROLS
-   ============================================================ */
 
 .control-group {
   margin-bottom: 18px;
@@ -123,10 +103,6 @@ input[type="number"]:focus {
 input[type="range"] {
   width: 100%;
 }
-
-/* ============================================================
-   MODE SWITCH
-   ============================================================ */
 
 .mode-switch {
   display: flex;
@@ -198,10 +174,6 @@ input[type="range"] {
   outline-offset: 2px;
 }
 
-/* ============================================================
-   CUSTOM CSV
-   ============================================================ */
-
 .custom-csv {
   width: 100%;
   margin: 20px 0;
@@ -263,10 +235,6 @@ input[type="range"] {
   white-space: nowrap;
 }
 
-/* ============================================================
-   CUSTOM FILE REMOVE BUTTON
-   ============================================================ */
-
 .custom-file-remove {
   flex: 0 0 auto;
   min-height: 30px;
@@ -288,10 +256,6 @@ input[type="range"] {
   opacity: 0.8;
 }
 
-/* ============================================================
-   CHARACTERS
-   ============================================================ */
-
 .characters {
   display: flex;
   align-items: center;
@@ -310,24 +274,21 @@ input[type="range"] {
   overflow-wrap: break-word;
 }
 
-/* ============================================================
-   SETTINGS
-   ============================================================ */
-
 .settings {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 15px;
-  margin-top: 25px;
+  gap: 14px;
+  margin-top: 16px;
 }
 
 .settings .control-group {
   margin-bottom: 0;
 }
 
-/* ============================================================
-   CWTYPE
-   ============================================================ */
+.settings input,
+.settings select {
+  width: 100%;
+}
 
 .cwtype {
   width: 100%;
@@ -370,10 +331,6 @@ input[type="range"] {
   font-weight: 600;
   line-height: 1;
 }
-
-/* ============================================================
-   CWTYPE LAUFBAND
-   ============================================================ */
 
 #cwtype-laufband {
   position: relative;
@@ -436,10 +393,6 @@ input[type="range"] {
   white-space: nowrap;
 }
 
-/* ============================================================
-   CWTYPE SOLUTION
-   ============================================================ */
-
 .cwtype-solution {
   white-space: nowrap;
 }
@@ -474,10 +427,6 @@ input[type="range"] {
   display: inline-block;
   width: 1.35em;
 }
-
-/* ============================================================
-   BUTTONS
-   ============================================================ */
 
 .buttons {
   display: grid;
@@ -519,10 +468,6 @@ button:hover:not(:disabled) {
   border-color: #d2aaaa;
 }
 
-/* ============================================================
-   STATUS
-   ============================================================ */
-
 .status {
   margin-top: 30px;
   padding: 20px;
@@ -537,10 +482,6 @@ button:hover:not(:disabled) {
   font-size: 18px;
   font-weight: 500;
 }
-
-/* ============================================================
-   PROGRESS
-   ============================================================ */
 
 .progress {
   width: 100%;
@@ -564,10 +505,6 @@ button:hover:not(:disabled) {
   font-size: 14px;
 }
 
-/* ============================================================
-   SOLUTION
-   ============================================================ */
-
 .solution-section {
   margin-top: 30px;
 }
@@ -590,44 +527,200 @@ button:hover:not(:disabled) {
   overflow-x: auto;
 }
 
-/* ============================================================
-   RESPONSIVE
-   ============================================================ */
+.test-section {
+  margin-top: 24px;
+}
+
+.test-section h2 {
+  margin: 0 0 16px;
+}
+
+.test-section .control-group {
+  margin-top: 24px;
+  margin-bottom: 14px;
+}
+
+.test-section .control-group > label {
+  margin-bottom: 6px;
+}
+
+.key-display {
+  display: flex;
+  gap: 12px;
+}
+
+.key-indicator {
+  flex: 1;
+  padding: 12px;
+  background: #f5f5f5;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.key-indicator.active {
+  background: #ccc;
+}
+
+.option-box {
+  margin-top: 16px;
+  padding: 14px;
+  background: #fafafa;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.checkbox-label {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.checkbox-label input {
+  width: auto;
+}
+
+.mode-description {
+  margin: 10px 0;
+  padding: 10px;
+  background: #f5f5f5;
+  border-left: 4px solid #888;
+  line-height: 1.5;
+}
+
+.meter {
+  position: relative;
+  width: 100%;
+  height: 32px;
+  margin-top: 10px;
+  background: #e5e5e5;
+  border: 1px solid #aaa;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.meter-level {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: #555;
+}
+
+.meter-threshold,
+.meter-off-threshold {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 2px;
+}
+
+.meter-threshold {
+  background: #d00000;
+}
+
+.meter-off-threshold {
+  background: #666;
+}
+
+.meter-values {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.meter-value {
+  padding: 6px 8px;
+  background: #fafafa;
+  border: 1px solid #ccc;
+  font-size: 13px;
+}
+
+.meter-value strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.signal-state {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f5f5f5;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.signal-state.active {
+  background: #ccc;
+}
+
+.source-state {
+  margin-top: 12px;
+  padding: 10px;
+  background: #fafafa;
+  border: 1px solid #ccc;
+}
+
+.source-state strong {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.key-output {
+  padding: 12px;
+  background: #f5f5f5;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.event-log {
+  min-height: 240px;
+  max-height: 400px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.info-box {
+  margin-top: 14px;
+  padding: 12px;
+  background: #fafafa;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  line-height: 1.5;
+}
 
 @media (max-width: 800px) {
-  .settings {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .cwtype-shortcuts {
     gap: 22px;
   }
 }
 
-@media (max-width: 600px) {
-  .container {
-    padding: 15px 10px 30px;
-  }
-
-  .training {
-    padding: 15px;
-  }
-
+@media (max-width: 700px) {
   .settings {
     grid-template-columns: 1fr;
   }
 
-  .characters {
-    font-size: 22px;
-  }
-
-  #cwtype-track {
-    font-size: 20px;
-  }
-
   .cwtype-shortcuts {
-    gap: 12px;
-    font-size: 12px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin: 20px 0;
+    white-space: normal;
+  }
+
+  .cwtype-shortcuts span {
+    justify-content: flex-start;
+  }
+
+  .key-display {
+    flex-direction: column;
   }
 }
 

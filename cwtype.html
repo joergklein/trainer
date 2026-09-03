@@ -2,11 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
     <title>CW Type</title>
-
     <link rel="stylesheet" href="assets/css/styles.css" />
   </head>
 
@@ -17,40 +14,37 @@
       </header>
 
       <section class="training">
-        <!-- ==================================================
-             MODE
-             ================================================== -->
+        <div style="display: flex; align-items: center">
+          <div class="control-group">
+            <label>Mode</label>
 
-        <div class="control-group">
-          <label>Mode</label>
+            <div class="mode-switch" style="margin-bottom: 0">
+              <span class="mode-label">Listen</span>
 
-          <div class="mode-switch">
-            <span class="mode-label">Listen</span>
+              <label class="mode-toggle">
+                <input id="mode-switch" type="checkbox" checked />
+                <span class="mode-slider"></span>
+              </label>
 
-            <label class="mode-toggle">
-              <input id="mode-switch" type="checkbox" checked />
-              <span class="mode-slider"></span>
-            </label>
-
-            <span class="mode-label">Send</span>
+              <span class="mode-label">Send</span>
+            </div>
           </div>
+
+          <button
+            type="button"
+            style="margin-left: 80px"
+            onclick="window.location.href = 'key.html'"
+          >
+            CW Key Test
+          </button>
         </div>
 
-        <!-- ==================================================
-             TYPE MODE
-             ================================================== -->
-
         <section id="type-mode">
-          <!-- ==================================================
-               CSV UPLOAD
-               ================================================== -->
-
           <section class="custom-csv">
             <div class="custom-csv-action">
               <label class="file-button" for="custom-file">
                 Upload your CSV file
               </label>
-
               <input
                 id="custom-file"
                 type="file"
@@ -66,33 +60,19 @@
             ></div>
           </section>
 
-          <!-- ==================================================
-               METHOD
-               ================================================== -->
-
           <div class="control-group">
             <label for="method">Method</label>
-
             <select id="method">
               <option value="">Loading...</option>
             </select>
           </div>
 
-          <!-- ==================================================
-               LESSON
-               ================================================== -->
-
           <div class="control-group">
             <label for="lesson">Lesson</label>
-
             <select id="lesson">
               <option value="">Loading...</option>
             </select>
           </div>
-
-          <!-- ==================================================
-               SETTINGS
-               ================================================== -->
 
           <div class="settings">
             <div class="control-group">
@@ -121,30 +101,20 @@
             </div>
           </div>
 
-          <!-- ==================================================
-               KEYBOARD SHORTCUTS
-               ================================================== -->
-
           <div class="cwtype-shortcuts" aria-label="Keyboard shortcuts">
             <span>
               <kbd>Space / Morse key</kbd>
               Start training
             </span>
-
             <span>
               <kbd>Ctrl</kbd> + <kbd>Space</kbd>
               Pause / Resume
             </span>
-
             <span>
               <kbd>Ctrl</kbd> + <kbd>X</kbd>
               Stop → Show solution
             </span>
           </div>
-
-          <!-- ==================================================
-               CW TYPE TRACK
-               ================================================== -->
 
           <section class="cwtype-laufband" id="cwtype-laufband">
             <div
@@ -152,41 +122,21 @@
               class="cwtype-marker"
               aria-hidden="true"
             ></div>
-
             <div id="cwtype-track" class="cwtype-track"></div>
           </section>
-
-          <!-- ==================================================
-               SOLUTION
-               ================================================== -->
 
           <section class="solution-section">
             <button id="show-solution" type="button" disabled>
               Show solution
             </button>
-
             <pre id="solution" class="solution" hidden></pre>
           </section>
         </section>
       </section>
     </main>
 
-    <!-- ======================================================
-         AUDIO
-         ====================================================== -->
-
     <script src="assets/js/incwaudio.js"></script>
-
-    <!-- ======================================================
-         CW TYPE
-         ====================================================== -->
-
     <script src="assets/js/cwtype.js"></script>
-
-    <!-- ======================================================
-         MODE SWITCH
-         ====================================================== -->
-
     <script src="assets/js/cwmode.js"></script>
   </body>
 </html>
